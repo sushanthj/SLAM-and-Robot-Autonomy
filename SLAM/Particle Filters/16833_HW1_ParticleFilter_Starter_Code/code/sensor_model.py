@@ -49,5 +49,5 @@ class SensorModel:
         """
         TODO : Add your code here
         """
-        prob_zt1 = 1.0
+        prob_zt1 = 0.8
         return prob_zt1

@@ -31,9 +31,9 @@ def visualize_timestep(X_bar, tstep, output_path):
     x_locs = X_bar[:, 0] / 10.0
     y_locs = X_bar[:, 1] / 10.0
     scat = plt.scatter(x_locs, y_locs, c='r', marker='o')
-    plt.savefig('{}/{:04d}.png'.format(output_path, tstep))
-    plt.xlim([-50, 50])
-    plt.ylim([-50, 50])
+    # plt.savefig('{}/{:04d}.png'.format(output_path, tstep))
+    # plt.xlim([-50, 50])
+    # plt.ylim([-50, 50])
     plt.pause(0.00001)
     scat.remove()
 
@@ -100,8 +100,8 @@ if __name__ == '__main__':
     resampler = Resampling()
 
     num_particles = args.num_particles
-    # X_bar = init_particles_random(num_particles, occupancy_map)
-    X_bar = init_particles_freespace(num_particles, occupancy_map)
+    X_bar = init_particles_random(num_particles, occupancy_map)
+    # X_bar = init_particles_freespace(num_particles, occupancy_map)
     """
     Monte Carlo Localization Algorithm : Main Loop
     """
