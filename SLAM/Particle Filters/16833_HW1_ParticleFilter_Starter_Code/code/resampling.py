@@ -5,6 +5,7 @@
 '''
 
 import numpy as np
+import random
 
 
 class Resampling:
@@ -36,6 +37,22 @@ class Resampling:
         """
         TODO : Add your code here
         """
-        X_bar_resampled = X_bar
-        # X_bar_resampled =  np.zeros_like(X_bar)
-        return X_bar_resampled
+        size = X_bar.shape[0]
+        X_bar_resampled = []
+        # r = random.randrange(0, (1/size)*10000)
+        # r = r/10000
+        r = np.random.uniform(0, (1/size), 1)
+        c = X_bar[0][3]
+        i = 1
+        for m in range(1,size+1):
+            u = r + (m-1)*(1/size)
+            while u > c:
+                i += 1
+                c += X_bar[i-1][3]
+            X_bar_resampled.append(np.expand_dims((X_bar[i-1]),axis=0))
+
+        X_bar_resampled_2 = np.vstack(X_bar_resampled)
+        # import ipdb
+        # ipdb.set_trace()
+
+        return X_bar_resampled_2
