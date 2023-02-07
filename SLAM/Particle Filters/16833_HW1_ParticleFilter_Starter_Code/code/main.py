@@ -16,6 +16,7 @@ from resampling import Resampling
 from matplotlib import pyplot as plt
 from matplotlib import figure as fig
 import time
+import ipdb
 
 
 def visualize_map(occupancy_map):
@@ -31,6 +32,8 @@ def visualize_timestep(X_bar, tstep, output_path):
     y_locs = X_bar[:, 1] / 10.0
     scat = plt.scatter(x_locs, y_locs, c='r', marker='o')
     plt.savefig('{}/{:04d}.png'.format(output_path, tstep))
+    plt.xlim([-50, 50])
+    plt.ylim([-50, 50])
     plt.pause(0.00001)
     scat.remove()
 
@@ -97,8 +100,8 @@ if __name__ == '__main__':
     resampler = Resampling()
 
     num_particles = args.num_particles
-    X_bar = init_particles_random(num_particles, occupancy_map)
-    # X_bar = init_particles_freespace(num_particles, occupancy_map)
+    # X_bar = init_particles_random(num_particles, occupancy_map)
+    X_bar = init_particles_freespace(num_particles, occupancy_map)
     """
     Monte Carlo Localization Algorithm : Main Loop
     """
@@ -144,28 +147,29 @@ if __name__ == '__main__':
         # Vectorized version will receive a bonus. i.e., the functions take all particles as the input and process them in a vector.
         for m in range(0, num_particles):
             """
-            MOTION MODEL
+            MOTION MODEL (predict how the particle would move + add some noise)
             """
             x_t0 = X_bar[m, 0:3]
             x_t1 = motion_model.update(u_t0, u_t1, x_t0)
 
             """
-            SENSOR MODEL
+            SENSOR MODEL ()
             """
             if (meas_type == "L"):
                 z_t = ranges
                 w_t = sensor_model.beam_range_finder_model(z_t, x_t1)
                 X_bar_new[m, :] = np.hstack((x_t1, w_t))
-            # else:
-            #     X_bar_new[m, :] = np.hstack((x_t1, X_bar[m, 3]))
+            else:
+                X_bar_new[m, :] = np.hstack((x_t1, X_bar[m, 3]))
 
         X_bar = X_bar_new
         u_t0 = u_t1
 
         """
-        RESAMPLING
+        RESAMPLING (update which particles we want to finally use, we are refining our predictions)
         """
         X_bar = resampler.low_variance_sampler(X_bar)
 
         if args.visualize:
             visualize_timestep(X_bar, time_idx, args.output)
+            pass
