@@ -157,8 +157,8 @@ if __name__ == '__main__':
             """
             if (meas_type == "L"):
                 z_t = ranges
-                w_t = sensor_model.beam_range_finder_model(z_t, x_t1)
-                X_bar_new[m, :] = np.hstack((x_t1, w_t))
+                w_t = sensor_model.beam_range_finder_model(z_t, x_t1) # Line 5
+                X_bar_new[m, :] = np.hstack((x_t1, w_t)) # Line 6
             else:
                 X_bar_new[m, :] = np.hstack((x_t1, X_bar[m, 3]))
 
