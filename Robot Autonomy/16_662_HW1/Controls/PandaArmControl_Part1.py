@@ -77,9 +77,7 @@ def impedance_control(model, data): #TODO:
     1. Impedecne controller are interaction controller
     2. This means it's not suitable for position control but can only exert forces
     3. Therefore the only output we command is how much force our robot will exert
-    4. However, since we're not giving a wrench like force control we need to tune our Kp and errors instead
-    5. However, since we know we only need a force of 15N along x-axis, we only need to tune
-       the error such that error*Kp = 15N. Easy solution is set Kp=100 and set error = 15/Kp
+    4. However, here we construct our wrench differently as = stiffness*pos_error + damping*vel_error
     """
 
     # Implement an impedance control callback here that generates a force of 15 N along the global x-axis,
@@ -95,8 +93,9 @@ def impedance_control(model, data): #TODO:
     The overall position will be 1x6 vector and so will velocity (positional + angular)
     The position is a 1x6 vector because it contains [x,y,z,roll,pitch,yaw]
 
-    Now, the simulator works on quaternions, but for our math of Jacobian transpose we need
-    roll,pitch,yaw. Therefore we convert the quaternion error to roll,pitch,yaw error finally
+    However for impedence control we don't care about angular aspect of position
+
+    !NOTE: We have implemented a hacky version of impedence control for PandaArmControl_Part2
     """
 
     # Instantite a handle to the desired body on the robot
@@ -108,8 +107,8 @@ def impedance_control(model, data): #TODO:
     #                           but we'll combine with rotations later to make it a 1x6)
     pos_des = np.array([0.595, 0, 0.595])
 
-    # Set the desired velocities (positional and anglur is a 1x6 array)
-    vel_des = np.zeros((6,1))
+    # Set the desired velocities (positional vel only therfore 3x1)
+    vel_des = np.zeros((3,1))
 
     # Set the desired orientation (Use numpy quaternion manipulation functions)
     # convert desired_(roll,pitch,yaw) to desired_quaternion
@@ -120,28 +119,34 @@ def impedance_control(model, data): #TODO:
     pos_curr = end_effector.xpos
     vel_curr = np.zeros((6,1))
     mj.mj_objectVelocity(model, data, mj.mjtObj.mjOBJ_BODY, id, vel_curr, True)
+    # for impedence control we need only the first 3 elements
+    vel_curr = vel_curr[0:3,:]
+    print(vel_curr.shape)
 
-    # Get orientation error
-    orientation_error = orientation_des - orientation_curr
-    print("orientation error in quaternion", orientation_error)
-    orientation_error = quaternion.from_float_array(orientation_error)
-    orientation_error_axis_angle = quaternion.as_rotation_vector(orientation_error)
-    print("orientation error in axis angle", orientation_error_axis_angle)
+    # Get orientation error (Not using this for impedence control)
+    # orientation_error = orientation_des - orientation_curr
+    # print("orientation error in quaternion", orientation_error)
+    # orientation_error = quaternion.from_float_array(orientation_error)
+    # orientation_error_axis_angle = quaternion.as_rotation_vector(orientation_error)
+    # print("orientation error in axis angle", orientation_error_axis_angle)
+    # orientation_error_blank = np.array([0,0,0])
 
     # Get the errors
     vel_error = vel_des - vel_curr
+    # expanding vel_error to 6x1
+    vel_error_final = np.zeros((6,1))
+    vel_error_final[0:3,0] = vel_error.squeeze()
     pos_error = pos_des - pos_curr
-    pos_error = np.concatenate([pos_error, orientation_error_axis_angle])
-    pos_error = np.expand_dims(pos_error, axis=1)
+    # expanding pos_error to 6x1
+    pos_error_final = np.zeros((6,1))
+    pos_error_final[0:3,0] = pos_error.squeeze()
+
+    print("pos error final shape", pos_error_final.shape)
+    print("vel error final shape", vel_error_final.shape)
 
     # Compute the impedance control input torques
-    Kp = 2
-    Kd = 2
-
-    # Now everthing we did above for position error was for something more like a
-    # position control, however, for impedence control in this case we need only along x-axis
-    pos_error_new = np.zeros((6,1), dtype=np.float32)
-    pos_error_new[0] = 15/Kp
+    stiffness = 31
+    damping = 20
 
     # Get the Jacobian at the desired location on the robot
     # init a dummy jacobian matrix of the right size (model.nv gives the DOF required)
@@ -158,8 +163,8 @@ def impedance_control(model, data): #TODO:
     # This function works by taking in return parameters!!! Make sure you supply it with placeholder
     # variables
 
-    # Set the control inputs
-    required_ctrl_inp = np.squeeze(final_jacobian.T @ (Kd*vel_error + Kp*pos_error_new))
+    # Set the control inputs (specific to impedence control)
+    required_ctrl_inp = np.squeeze(final_jacobian.T @ (damping*vel_error_final + stiffness*pos_error_final))
 
     data.ctrl[:7] = data.qfrc_bias[:7] + required_ctrl_inp
 
@@ -211,7 +216,7 @@ if __name__ == "__main__":
     # compensation callback has been implemented for you. Run the file and play with the model as
     # explained in the PDF
 
-    mj.set_mjcb_control(force_control) #TODO:
+    mj.set_mjcb_control(impedance_control) #TODO:
 
     ################################# Swap Callback Above This Line #################################
 
@@ -224,7 +229,7 @@ if __name__ == "__main__":
     viewer.launch(model, data)
 
     # Save recorded force and time points as a csv file
-    force = np.reshape(force, (5000, 1))
-    time = np.reshape(time, (5000, 1))
-    plot = np.concatenate((time, force), axis=1)
-    np.savetxt('force_vs_time.csv', plot, delimiter=',')
+    # force = np.reshape(force, (5000, 1))
+    # time = np.reshape(time, (5000, 1))
+    # plot = np.concatenate((time, force), axis=1)
+    # np.savetxt('force_vs_time.csv', plot, delimiter=',')
