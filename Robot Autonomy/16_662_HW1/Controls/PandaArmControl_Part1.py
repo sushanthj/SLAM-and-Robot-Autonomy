@@ -22,7 +22,6 @@ def gravity_comp(model, data):
 
 # Force control callback
 def force_control(model, data): #TODO:
-
     # Implement a force control callback here that generates a force of 15 N along the global x-axis,
     # i.e. the x-axis of the robot arm base. You can use the comments as prompts or use your own flow
     # of code. The comments are simply meant to be a reference.
@@ -50,15 +49,16 @@ def force_control(model, data): #TODO:
     # get the final jacobian by combining jacp and jacr
     final_jacobian = np.concatenate((jacp, jacr), axis=0) # will be 6xmodel.nv shape
 
-    # This function works by taking in return parameters!!! Make sure you supply it with placeholder
-    # variables
-
     # Specify the desired force as a wrench which is a 6x1 vector
-    f_des = np.array([15,0,0,0,0,0])
+    wrench_des = np.array([15,0,0,0,0,0])
 
     # Compute the required control input using desired force values (using Jacobian transpose method)
-    required_ctrl_inp = np.matmul(final_jacobian.T, f_des)
-    print(required_ctrl_inp.shape)
+    required_ctrl_inp = np.matmul(final_jacobian.T, wrench_des)
+
+    orientation_curr = end_effector.xquat
+    pos_curr = end_effector.xpos
+    print("current position", pos_curr)
+    print("current orientation", orientation_curr)
 
     # Set the control inputs (modify data similar to position control)
     data.ctrl[:7] = data.qfrc_bias[:7] + required_ctrl_inp
@@ -71,6 +71,16 @@ def force_control(model, data): #TODO:
 
 # Control callback for an impedance controller
 def impedance_control(model, data): #TODO:
+    """
+    Impedence Control Basics:
+
+    1. Impedecne controller are interaction controller
+    2. This means it's not suitable for position control but can only exert forces
+    3. Therefore the only output we command is how much force our robot will exert
+    4. However, since we're not giving a wrench like force control we need to tune our Kp and errors instead
+    5. However, since we know we only need a force of 15N along x-axis, we only need to tune
+       the error such that error*Kp = 15N. Easy solution is set Kp=100 and set error = 15/Kp
+    """
 
     # Implement an impedance control callback here that generates a force of 15 N along the global x-axis,
     # i.e. the x-axis of the robot arm base. You can use the comments as prompts or use your own flow
@@ -96,15 +106,14 @@ def impedance_control(model, data): #TODO:
 
     # Set the desired position (we'll set it to a 1x3 matrix now,
     #                           but we'll combine with rotations later to make it a 1x6)
-    #!ASK TA WHAT THIS SHOULD BE
-    pos_des = np.array([2, 0, 0.7])
+    pos_des = np.array([0.595, 0, 0.595])
 
     # Set the desired velocities (positional and anglur is a 1x6 array)
     vel_des = np.zeros((6,1))
 
     # Set the desired orientation (Use numpy quaternion manipulation functions)
     # convert desired_(roll,pitch,yaw) to desired_quaternion
-    orientation_des = np.array([0,0,0,0])
+    orientation_des = np.array([-0.5,0.5,-0.5,0.5])
 
     # Get the current orientation, position and vel of end effector
     orientation_curr = end_effector.xquat
@@ -119,11 +128,20 @@ def impedance_control(model, data): #TODO:
     orientation_error_axis_angle = quaternion.as_rotation_vector(orientation_error)
     print("orientation error in axis angle", orientation_error_axis_angle)
 
-    # Get the position error
+    # Get the errors
+    vel_error = vel_des - vel_curr
     pos_error = pos_des - pos_curr
     pos_error = np.concatenate([pos_error, orientation_error_axis_angle])
     pos_error = np.expand_dims(pos_error, axis=1)
-    vel_error = vel_des - vel_curr
+
+    # Compute the impedance control input torques
+    Kp = 2
+    Kd = 2
+
+    # Now everthing we did above for position error was for something more like a
+    # position control, however, for impedence control in this case we need only along x-axis
+    pos_error_new = np.zeros((6,1), dtype=np.float32)
+    pos_error_new[0] = 15/Kp
 
     # Get the Jacobian at the desired location on the robot
     # init a dummy jacobian matrix of the right size (model.nv gives the DOF required)
@@ -140,14 +158,8 @@ def impedance_control(model, data): #TODO:
     # This function works by taking in return parameters!!! Make sure you supply it with placeholder
     # variables
 
-
-    # Compute the impedance control input torques
-    Kp = 10
-    Kd = 10
-
-
     # Set the control inputs
-    required_ctrl_inp = np.squeeze(final_jacobian.T @ (Kd*vel_error + Kp*pos_error))
+    required_ctrl_inp = np.squeeze(final_jacobian.T @ (Kd*vel_error + Kp*pos_error_new))
 
     data.ctrl[:7] = data.qfrc_bias[:7] + required_ctrl_inp
 
@@ -199,7 +211,7 @@ if __name__ == "__main__":
     # compensation callback has been implemented for you. Run the file and play with the model as
     # explained in the PDF
 
-    mj.set_mjcb_control(impedance_control) #TODO:
+    mj.set_mjcb_control(force_control) #TODO:
 
     ################################# Swap Callback Above This Line #################################
 
@@ -212,7 +224,7 @@ if __name__ == "__main__":
     viewer.launch(model, data)
 
     # Save recorded force and time points as a csv file
-    # force = np.reshape(force, (5000, 1))
-    # time = np.reshape(time, (5000, 1))
-    # plot = np.concatenate((time, force), axis=1)
-    # np.savetxt('force_vs_time.csv', plot, delimiter=',')
+    force = np.reshape(force, (5000, 1))
+    time = np.reshape(time, (5000, 1))
+    plot = np.concatenate((time, force), axis=1)
+    np.savetxt('force_vs_time.csv', plot, delimiter=',')
