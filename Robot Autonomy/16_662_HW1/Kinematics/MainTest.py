@@ -15,7 +15,7 @@ joint_targets = [[0., 0., 0., 0., 0., 0., 0.], \
 for joint_target in joint_targets:
   print ('\nJoints:')
   print (joint_target)
-  Hcurr,J =mybot.ForwardKin(joint_target)
+  Hcurr, J = mybot.ForwardKin(joint_target)
   ee_pose = Hcurr[-1]
   rot_ee = ee_pose[:3,:3]
   pos_ee = ee_pose[:3,3]
@@ -32,6 +32,6 @@ HGoal= np.array([[0.,0.,1.,0.6], # target EE pose
 		 [-1.,0,0.,0.5],
 		 [0.,0.,0.,1]])
 
-q,Err=mybot.IterInvKin(qInit, HGoal)
+q, Err = mybot.IterInvKin(qInit, HGoal)
 print('Error', np.linalg.norm(Err[0:3]),np.linalg.norm(Err[3:6]))
 print('Computed IK angles', q)

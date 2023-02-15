@@ -78,6 +78,10 @@ def impedance_control(model, data): #TODO:
     2. This means it's not suitable for position control but can only exert forces
     3. Therefore the only output we command is how much force our robot will exert
     4. However, here we construct our wrench differently as = stiffness*pos_error + damping*vel_error
+    5. Impedence control allows for compliant movement, where motion is not restrictive in one
+       direction but can be made restrictive in other direction. We can also try this out
+       ourselves by making Kp a diagonal matrix and making the gains high for all other
+       directions other than x-axis and then double clicking the robot in simulator to move it
     """
 
     # Implement an impedance control callback here that generates a force of 15 N along the global x-axis,
@@ -93,9 +97,7 @@ def impedance_control(model, data): #TODO:
     The overall position will be 1x6 vector and so will velocity (positional + angular)
     The position is a 1x6 vector because it contains [x,y,z,roll,pitch,yaw]
 
-    However for impedence control we don't care about angular aspect of position
-
-    !NOTE: We have implemented a hacky version of impedence control for PandaArmControl_Part2
+    However we don't care about angular aspect of position in this question
     """
 
     # Instantite a handle to the desired body on the robot
@@ -104,8 +106,10 @@ def impedance_control(model, data): #TODO:
     id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "hand")
 
     # Set the desired position (we'll set it to a 1x3 matrix now,
-    #                           but we'll combine with rotations later to make it a 1x6)
-    pos_des = np.array([0.595, 0, 0.595])
+    #                           but we'll combine with rotations (zero vector here) later to make it a 1x6)
+    # Also, we are appending 1 to the desired position because even after we reach the board
+    # i.e. steady_state, we will have to 
+    pos_des = np.array([0.595 + 1, 0, 0.595])
 
     # Set the desired velocities (positional vel only therfore 3x1)
     vel_des = np.zeros((3,1))
@@ -132,6 +136,8 @@ def impedance_control(model, data): #TODO:
     # orientation_error_blank = np.array([0,0,0])
 
     # Get the errors
+    # since vel_des is zero, and current vel will be high due to error in position
+    # this vel_error will be negative and will act as a damper on the whole system
     vel_error = vel_des - vel_curr
     # expanding vel_error to 6x1
     vel_error_final = np.zeros((6,1))
@@ -145,7 +151,7 @@ def impedance_control(model, data): #TODO:
     print("vel error final shape", vel_error_final.shape)
 
     # Compute the impedance control input torques
-    stiffness = 31
+    stiffness = 15
     damping = 20
 
     # Get the Jacobian at the desired location on the robot
@@ -160,14 +166,10 @@ def impedance_control(model, data): #TODO:
     # get the final jacobian by combining jacp and jacr
     final_jacobian = np.concatenate((jacp, jacr)) # will be 6xmodel.nv shape
 
-    # This function works by taking in return parameters!!! Make sure you supply it with placeholder
-    # variables
-
     # Set the control inputs (specific to impedence control)
     required_ctrl_inp = np.squeeze(final_jacobian.T @ (damping*vel_error_final + stiffness*pos_error_final))
 
     data.ctrl[:7] = data.qfrc_bias[:7] + required_ctrl_inp
-
 
     # DO NOT CHANGE ANY THING BELOW THIS IN THIS FUNCTION
 
@@ -216,7 +218,7 @@ if __name__ == "__main__":
     # compensation callback has been implemented for you. Run the file and play with the model as
     # explained in the PDF
 
-    mj.set_mjcb_control(impedance_control) #TODO:
+    mj.set_mjcb_control(force_control) #TODO:
 
     ################################# Swap Callback Above This Line #################################
 
@@ -229,7 +231,7 @@ if __name__ == "__main__":
     viewer.launch(model, data)
 
     # Save recorded force and time points as a csv file
-    # force = np.reshape(force, (5000, 1))
-    # time = np.reshape(time, (5000, 1))
-    # plot = np.concatenate((time, force), axis=1)
-    # np.savetxt('force_vs_time.csv', plot, delimiter=',')
+    force = np.reshape(force, (5000, 1))
+    time = np.reshape(time, (5000, 1))
+    plot = np.concatenate((time, force), axis=1)
+    np.savetxt('force_vs_time.csv', plot, delimiter=',')
