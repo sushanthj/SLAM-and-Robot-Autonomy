@@ -107,8 +107,61 @@ class FrankArm:
 		'''
 
         W = np.eye(7)
-        C = np.eye(6)
+        W[-1,0] = 1.0
+        W[2,2] = 100.0
+        W[3,3] = 100.0
+        W[-1,-1] = 100.0
 
-        Err = 0
+        C = np.eye(6)
+        C[0,0] = 1000000.0
+        C[1,1] = 1000000.0
+        C[2,2] = 1000000.0
+        C[3,3] = 1000.0
+        C[4,4] = 1000.0
+        C[5,5] = 1000.0
+
+        self.ForwardKin(ang)
+
+        Err = np.ones(6, dtype=np.float32)
+
+        while(abs(np.linalg.norm(Err) > 0.5)):
+            # compute rotation error
+            rErrR = np.matmul(TGoal[0:3, 0:3], np.transpose(self.Tcurr[-1][0:3,0:3]))
+            # convert rotation error to axis angle form
+            rErrAxis, rErrAng = rt.R2axisang(rErrR)
+
+            # limit rotation angle
+            if rErrAng > 0.1: rErrAng = 0.1
+
+            if rErrAng < -0.1: rErrAng = -0.1
+
+            # final rotation error
+            rErr = [rErrAxis[0]*rErrAng, rErrAxis[1]*rErrAng, rErrAxis[2]*rErrAng]
+
+            # compute position error
+            xErr = TGoal[0:3,3] - self.Tcurr[-1][0:3,3]
+            if np.linalg.norm(xErr) > 0.01:
+                xErr = (xErr*0.01)/np.linalg.norm(xErr)
+
+            # update angles with pseudo inverse
+            Err[0:3] = xErr
+            Err[3:6] = rErr
+
+            """
+            compute the new angles to command
+            """
+
+            # Damped Least Squares approach to calculate Inverse Kinematics
+            # self.q[0:7] += J# * delta_x (where delta_x = Err)
+
+            # finding the J#
+            J = self.J
+            J_hash = np.linalg.inv(W) @ J.T @ np.linalg.inv(J @ np.linalg.inv(W) @ J.T + np.linalg.inv(C))
+
+            # update self.q by increments
+            self.q[0:7] += J_hash @ Err
+
+            # do forward kinematics with new angles
+            self.ForwardKin(self.q[0:7])
 
         return self.q[0:-1], Err
