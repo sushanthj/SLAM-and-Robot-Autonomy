@@ -91,8 +91,18 @@ if __name__ == '__main__':
     src_path_log = args.path_to_log
     os.makedirs(args.output, exist_ok=True)
 
+    # reads the wean.dat which is map of Wean hall of size 8000x8000 and stored as an
+    # occupancy grid. The grid cells are spaced 10cm apart, therefore there are 800x800 cells
     map_obj = MapReader(src_path_map)
+    # returns occupancy map in the correct structure we need (a numpy array of size 800x800)
+    # each element of this matrix represents the probability of that points being occupied.
+    # if you play around, you'll see there are many points with the probability ~0.1 to ~0.8,
+    # but there are no grid cells with probability == 1.
+    # probabilty == -1 tells us we have no clue about whats in that cell
     occupancy_map = map_obj.get_map()
+    ipdb.set_trace()
+
+    # contains information on robot sensor readings (laser and odometry) at each timestep
     logfile = open(src_path_log, 'r')
 
     motion_model = MotionModel()
@@ -111,25 +121,37 @@ if __name__ == '__main__':
     first_time_idx = True
     for time_idx, line in enumerate(logfile):
 
+        ipdb.set_trace()
+
         # Read a single 'line' from the log file (can be either odometry or laser measurement)
         # L : laser scan measurement, O : odometry measurement
         meas_type = line[0]
 
         # convert measurement values from string to double
+        """
+        - meas_vals is a numpy array of size 187. The first 3 elements are the odometry reading
+        - the last element of meas_vals is the time_stamp
+        - The 3:6 th elements of meas_vals are the x,y,thetha of laser in odometry frame
+        - You can ignore this 3:6 th elements as you can assume a fixed offset of the laser
+        """
         meas_vals = np.fromstring(line[2:], dtype=np.float64, sep=' ')
 
         # odometry reading [x, y, theta] in odometry frame
         odometry_robot = meas_vals[0:3]
-        time_stamp = meas_vals[-1]
+        time_stamp = meas_vals[-1] # size=1
 
         # ignore pure odometry measurements for (faster debugging)
         # if ((time_stamp <= 0.0) | (meas_type == "O")):
         #     continue
 
         if (meas_type == "L"):
-            # [x, y, theta] coordinates of laser in odometry frame
-            odometry_laser = meas_vals[3:6]
-            # 180 range measurement values from single laser scan
+
+            #! You can ignore this odometry laser but it basically is = [x, y, theta]
+            #! Instead use the information that laser is 25 cm offset forward (forward = x-axis)
+            # NOTE: odometry_laser is coordinates of laser in odometry frame
+            odometry_laser = meas_vals[3:6] # ignore
+
+            # NOTE: array of size=180, range measurement values from single laser scan
             ranges = meas_vals[6:-1]
 
         print("Processing time step {} at time {}s".format(
@@ -140,8 +162,11 @@ if __name__ == '__main__':
             first_time_idx = False
             continue
 
+        # init random new particles of size num_particles
         X_bar_new = np.zeros((num_particles, 4), dtype=np.float64)
-        u_t1 = odometry_robot
+        # this is the odometry update (from robot odometry sensors).
+        # This update is applied to each particle (i.e. it is applied at each iteration of the for loop)
+        u_t1 = odometry_robot # size=3
 
         # Note: this formulation is intuitive but not vectorized; looping in python is SLOW.
         # Vectorized version will receive a bonus. i.e., the functions take all particles as the input and process them in a vector.
@@ -149,15 +174,20 @@ if __name__ == '__main__':
             """
             MOTION MODEL (predict how the particle would move + add some noise)
             """
+            # original particle position
             x_t0 = X_bar[m, 0:3]
+            # update particle position according to motion model
             x_t1 = motion_model.update(u_t0, u_t1, x_t0)
 
             """
-            SENSOR MODEL ()
+            SENSOR MODEL (Need to do some ray-casting to determing p(z_t | [x_t, Map])
             """
             if (meas_type == "L"):
+                # ranges is size=180, represents the robot's sensor reading
                 z_t = ranges
+                # weigh each particle according to p(z_t | [x_t, Map])
                 w_t = sensor_model.beam_range_finder_model(z_t, x_t1) # Line 5
+                # append these weights to each particle (we'll resample below)
                 X_bar_new[m, :] = np.hstack((x_t1, w_t)) # Line 6
             else:
                 X_bar_new[m, :] = np.hstack((x_t1, X_bar[m, 3]))
@@ -167,6 +197,8 @@ if __name__ == '__main__':
 
         """
         RESAMPLING (update which particles we want to finally use, we are refining our predictions)
+
+        We use weights w_t associated with each particle to resample
         """
         X_bar = resampler.low_variance_sampler(X_bar)
 

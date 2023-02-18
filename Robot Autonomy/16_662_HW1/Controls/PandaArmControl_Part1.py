@@ -184,7 +184,8 @@ def position_control(model, data):
     body = data.body("hand")
 
     # Set the desired joint angle positions
-    desired_joint_positions = np.array([0,0,0,-1.57079,0,1.57079,-0.7853])
+    # desired_joint_positions = np.array([0,0,0,-1.57079,0,1.57079,-0.7853])
+    desired_joint_positions = np.array([-0.026055326357880892, 0.05772221511212522, -0.007979386648264163, -2.1134429531755288, -0.14733894110502982, 3.711736948403839, -0.9441416357096284])
 
     # Set the desired joint velocities
     desired_joint_velocities = np.array([0,0,0,0,0,0,0])
@@ -218,7 +219,7 @@ if __name__ == "__main__":
     # compensation callback has been implemented for you. Run the file and play with the model as
     # explained in the PDF
 
-    mj.set_mjcb_control(force_control) #TODO:
+    mj.set_mjcb_control(position_control)
 
     ################################# Swap Callback Above This Line #################################
 

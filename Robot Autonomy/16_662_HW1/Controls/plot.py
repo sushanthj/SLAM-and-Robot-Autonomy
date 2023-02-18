@@ -51,6 +51,7 @@ def plot_together(data1, data2, file_name):
     plt.title(file_name)
     plt.xlabel('time (s)')
     plt.ylabel('force (N)')
+    plt.ylim((-100, 180))
     plt.legend(loc="upper left")
     plt.show()
 

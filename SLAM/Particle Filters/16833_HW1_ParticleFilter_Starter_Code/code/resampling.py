@@ -34,9 +34,6 @@ class Resampling:
         param[in] X_bar : [num_particles x 4] sized array containing [x, y, theta, wt] values for all particles
         param[out] X_bar_resampled : [num_particles x 4] sized array containing [x, y, theta, wt] values for resampled set of particles
         """
-        """
-        TODO : Add your code here
-        """
         size = X_bar.shape[0]
         X_bar_resampled = []
         # r = random.randrange(0, (1/size)*10000)

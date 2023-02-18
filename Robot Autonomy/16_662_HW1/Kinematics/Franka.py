@@ -124,7 +124,7 @@ class FrankArm:
 
         Err = np.ones(6, dtype=np.float32)
 
-        while(abs(np.linalg.norm(Err) > 0.5)):
+        while(np.linalg.norm(Err[0:3]) > x_eps and np.linalg.norm(Err[3:6] > r_eps)):
             # compute rotation error
             rErrR = np.matmul(TGoal[0:3, 0:3], np.transpose(self.Tcurr[-1][0:3,0:3]))
             # convert rotation error to axis angle form
