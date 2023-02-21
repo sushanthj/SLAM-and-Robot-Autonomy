@@ -35,6 +35,7 @@ class Resampling:
         param[out] X_bar_resampled : [num_particles x 4] sized array containing [x, y, theta, wt] values for resampled set of particles
         """
         size = X_bar.shape[0]
+
         X_bar_resampled = []
         # r = random.randrange(0, (1/size)*10000)
         # r = r/10000
@@ -49,7 +50,5 @@ class Resampling:
             X_bar_resampled.append(np.expand_dims((X_bar[i-1]),axis=0))
 
         X_bar_resampled_2 = np.vstack(X_bar_resampled)
-        # import ipdb
-        # ipdb.set_trace()
 
         return X_bar_resampled_2

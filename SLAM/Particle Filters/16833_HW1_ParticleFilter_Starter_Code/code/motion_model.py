@@ -20,13 +20,12 @@ class MotionModel:
         The original numbers are for reference but HAVE TO be tuned.
         """
         # REMEMBER these alphas are squared!!
-        self._alpha1 = 0.1
-        self._alpha2 = 0.1
-        self._alpha3 = 0.1
-        self._alpha4 = 0.1
+        self._alpha1 = 0.17/10
+        self._alpha2 = 0.17/10
+        self._alpha3 = 100/10
+        self._alpha4 = 100/10
 
-
-    def update(self, u_t0, u_t1, x_t0):
+    def update(self, u_t0, u_t1, x_t0, dead_reckoning_flag):
         """
         param[in] u_t0 : particle state odometry reading [x, y, theta] at time (t-1) [odometry_frame]
         param[in] u_t1 : particle state odometry reading [x, y, theta] at time t [odometry_frame]
@@ -37,6 +36,13 @@ class MotionModel:
         delta_rot_1 = math.atan2((u_t1[1] - u_t0[1]), (u_t1[0] - u_t0[0])) - u_t0[2]
         delta_trans = math.sqrt((u_t0[0] - u_t1[0])**2 + (u_t0[1] - u_t1[1])**2)
         delta_rot_2 = u_t1[2] - u_t0[2] - delta_rot_1
+
+        if dead_reckoning_flag:
+            x_t1 = x_t0[0] + delta_trans * math.cos(x_t0[2] + delta_rot_1)
+            y_t1 = x_t0[1] + delta_trans * math.sin(x_t0[2] + delta_rot_1)
+            theta_t1 = x_t0[2] + delta_rot_1 + delta_rot_2
+
+            return np.array([x_t1, y_t1, theta_t1])
 
         # prediction step (we need to sample...) but how?
         delta_rot1_pred = delta_rot_1 - np.random.normal(0, (self._alpha1*delta_rot_1**2 + self._alpha2*delta_trans**2), size=1)[0]
