@@ -23,9 +23,39 @@ import time
 import ipdb
 import multiprocessing
 
-def get_ray_cast_per_square(start_pos_x, start_pos_y, grid_discretize):
-    # print(f"computing grid cell {start_pos_x},{start_pos_y}")
-    raycast_lookup = np.zeros((grid_discretize, grid_discretize, 360), dtype=np.int8)
+def visualize_map(occupancy_map):
+    fig = plt.figure(figsize=(15, 15))
+    mng = plt.get_current_fig_manager()
+    plt.ion()
+    x_locs = [600]
+    y_locs = [150]
+    scat = plt.scatter(x_locs, y_locs, c='b', marker='o', alpha=0.2)
+    d = 2
+    arrow_plot = plt.quiver(x_locs, y_locs, d * np.cos(0), d * np.sin(0))
+
+    a = np.load('./raycast_lookup/complete.npz')
+    lookup = a['arr']
+    look = lookup[x_locs[0], y_locs[0], :]
+
+
+    xs, ys = [], []
+    for angle, ray in enumerate(look):
+        rad = np.radians(angle)
+
+        print(ray)
+        x = x_locs[0] + np.cos(rad - np.pi / 2) * (ray/10)
+        y = y_locs[0] + np.sin(rad - np.pi / 2) * (ray/10)
+        xs.append(x)
+        ys.append(y)
+
+    plt.scatter(xs, ys)
+    plt.imshow(occupancy_map, cmap='Greys')
+    plt.axis([0, 800, 0, 800])
+    plt.waitforbuttonpress()
+
+def get_ray_cast_per_square(start_pos_x, grid_discretize, map_shape_axis_1):
+    print(f"computing grid cell {start_pos_x}")
+    raycast_lookup = np.zeros((grid_discretize, map_shape_axis_1, 360), dtype=np.float16)
 
     for xpos in range(raycast_lookup.shape[0]):
         for ypos in range(raycast_lookup.shape[1]):
@@ -34,14 +64,14 @@ def get_ray_cast_per_square(start_pos_x, start_pos_y, grid_discretize):
 
             # to make use of vectorized ray casting, init some dummy particles
             dummy_particles = np.ones((1,3))
-            dummy_particles[:,0] = xpos + start_pos_x
-            dummy_particles[:,1] = ypos + start_pos_y
+            dummy_particles[:,0] = (xpos + start_pos_x) * 10
+            dummy_particles[:,1] = (ypos) * 10
             dummy_particles[:,2] = 0
 
             raycast_vals = sensor_model.ray_casting_vectorized(dummy_particles)
             raycast_lookup[xpos][ypos] = raycast_vals[0,:]
 
-    name = os.path.join('./raycast_lookup', (str(start_pos_x)+str(start_pos_y)))
+    name = os.path.join('./raycast_lookup', str(start_pos_x))
     np.savez(name, arr=raycast_lookup)
 
 
@@ -73,6 +103,7 @@ if __name__ == '__main__':
     map_obj = MapReader(src_path_map)
     occupancy_map = map_obj.get_map()
     logfile = open(src_path_log, 'r')
+    visualize_map(occupancy_map)
 
     motion_model = MotionModel()
     sensor_model = SensorModel(occupancy_map)
@@ -80,19 +111,16 @@ if __name__ == '__main__':
     particle_processor = ParticleProcessor(motion_model=motion_model, sensor_model=sensor_model)
     resampler = Resampling()
 
-    # raycast_lookup = np.zeros((occupancy_map.shape[0], occupancy_map.shape[1], 360, 180), dtype=np.float16)
+    raycast_lookup = np.zeros((occupancy_map.shape[0], occupancy_map.shape[1], 360, 180), dtype=np.float16)
     grid_discretize = 10
 
     # multiprocessing.set_start_method('forkserver', force=True)
     # TODO: Check which number of processes is fastest, not just max
-    pool = multiprocessing.Pool(processes=8)
+    pool = multiprocessing.Pool(processes=12)
 
+    items = [(xpos, grid_discretize, occupancy_map.shape[1]) for xpos in range(0, occupancy_map.shape[0], grid_discretize)]
+    pool.starmap(get_ray_cast_per_square, items)
+    print("done")
+    pool.join()
+    pool.close()
 
-    for xpos in range(0, occupancy_map.shape[0], grid_discretize):
-        items = [(xpos, ypos, grid_discretize) for ypos in range(0, occupancy_map.shape[1], grid_discretize)]
-        ipdb.set_trace()
-        pool.starmap(get_ray_cast_per_square, items)
-        print("done with", xpos)
-            # pool.starmap(get_ray_cast_per_square, args=(xpos, ypos, grid_discretize))
-            # get_ray_cast_per_square(xpos, ypos, grid_discretize)
-            # worker.get()

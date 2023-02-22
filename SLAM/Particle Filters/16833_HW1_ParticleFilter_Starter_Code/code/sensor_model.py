@@ -54,7 +54,7 @@ class SensorModel:
         # Used in sampling angles in ray casting
         self._subsampling = 2
         self._occupancy_map = occupancy_map
-        self._occupancy_map_confidence_threshold = 0.9
+        self._occupancy_map_confidence_threshold = 0.45
         self._occupancy_map_resolution_centimeters_per_pixel = 10
 
         self._short_distribution = expon(scale=1 / self._lambda_short)
@@ -155,13 +155,13 @@ class SensorModel:
         X_body, Y_body, Yaw = X_t1[:, 0], X_t1[:, 1], X_t1[:, 2]
         X_laser = X_body + 25 * np.cos(Yaw)
         Y_laser = Y_body + 25 * np.sin(Yaw)
-        X_laser_pixels = X_laser / 10 # m, 1
-        Y_laser_pixels = Y_laser / 10 # m, 1
+        X_laser_pixels = X_laser / 10
+        Y_laser_pixels = Y_laser / 10
 
         X_laser = np.repeat(X_laser_pixels.reshape(-1, 1), num_beams, axis=1) # m, 180
         Y_laser = np.repeat(Y_laser_pixels.reshape(-1, 1), num_beams, axis=1) # m, 180
 
-        angles = np.array(list(range(-180, 180, self._discretization)))
+        angles = np.array(list(range(0, 360, self._discretization)))
         assert len(angles) == num_beams
 
         max_range_pixels = self._max_range / self._occupancy_map_resolution_centimeters_per_pixel
