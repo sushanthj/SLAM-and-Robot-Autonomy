@@ -54,3 +54,6 @@ class MotionModel:
         theta_t1 = x_t0[2] + delta_rot1_pred + delta_rot2_pred
 
         return np.array([x_t1, y_t1, theta_t1])
+
+    def update_vectorized(self, u_t0, u_t1, x_t0, dead_reckoning_flag):
+        pass
