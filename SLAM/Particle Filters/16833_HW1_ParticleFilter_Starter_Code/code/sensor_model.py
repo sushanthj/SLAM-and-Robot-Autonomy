@@ -211,3 +211,42 @@ class SensorModel:
                                                self._occupancy_map[Y, X] >= 0.2), 0, belief)
 
         return pruned_belief
+
+    def ray_casting_vectorized_centimeters(self, X_t1):
+        num_particles = len(X_t1)
+        num_beams = 360 // self._discretization
+        X_body, Y_body, Yaw = X_t1[:, 0], X_t1[:, 1], X_t1[:, 2]
+        X_laser = X_body + 25 * np.cos(Yaw)
+        Y_laser = Y_body + 25 * np.sin(Yaw)
+
+        X_laser = np.repeat(X_laser.reshape(-1, 1), num_beams, axis=1) # m, 180
+        Y_laser = np.repeat(Y_laser.reshape(-1, 1), num_beams, axis=1) # m, 180
+
+        angles = np.array(list(range(0, 360, self._discretization)))
+        assert len(angles) == num_beams
+
+        beam_hit_length = np.ones_like(X_laser) * self._max_range
+        beam_step = self._occupancy_map_resolution_centimeters_per_pixel // 2.1
+        np.arange(0, self._max_range, beam_step)
+        for ray_length in np.arange(0, self._max_range, beam_step):
+            # The beams start from the RHS of the robot, the yaw angle is measured from the heading of the robot.
+            # Hence the minus 90 degrees.
+            X_beams = X_laser + np.cos(np.radians(angles) + np.repeat(Yaw.reshape(-1, 1), 360 // self._discretization, axis=1)) * ray_length
+            Y_beams = Y_laser + np.sin(np.radians(angles) + np.repeat(Yaw.reshape(-1, 1), 360 // self._discretization, axis=1)) * ray_length
+
+            X_beams_pixels = np.round(X_beams / 10).astype(int)
+            Y_beams_pixels = np.round(Y_beams / 10).astype(int)
+
+            X_beams_pixels = np.clip(X_beams_pixels, 0, 799)
+            Y_beams_pixels = np.clip(Y_beams_pixels, 0, 799)
+
+            occupancy_vals = self._occupancy_map[Y_beams_pixels, X_beams_pixels]
+            # occupancy_vals = self._occupancy_map[X, Y]
+
+            beam_hit_length = np.minimum(
+                beam_hit_length,
+                np.where(occupancy_vals > self._occupancy_map_confidence_threshold, ray_length, self._max_range)
+            )
+
+        Z_star_t_arr = beam_hit_length
+        return Z_star_t_arr

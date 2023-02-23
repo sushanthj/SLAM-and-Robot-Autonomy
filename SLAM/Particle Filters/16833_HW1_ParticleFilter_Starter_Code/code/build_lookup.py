@@ -4,15 +4,17 @@ import os
 def main():
     vals = []
     # lookup = list(range(0,790,10))
-    path_list = []
+    file_list = []
     for filename in os.listdir('./raycast_lookup/'):
         if filename.endswith('.npz'):
-            path_list.append(filename)
+            file_list.append(int(filename.split('.npz')[0]))
 
-    path_list.sort()
+    file_list.sort()
+    print(file_list)
 
-    for path in path_list:
-        np_obj = np.load(os.path.join('./raycast_lookup', path))
+    for file in file_list:
+        full_filename = str(file) + '.npz'
+        np_obj = np.load(os.path.join('./raycast_lookup', full_filename))
         vals.append(np_obj['arr'])
 
     lookup_table = np.vstack(vals)

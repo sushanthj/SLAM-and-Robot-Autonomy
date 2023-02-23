@@ -23,15 +23,21 @@ import time
 import ipdb
 import multiprocessing
 
+VISUALIZE = True
+
 def visualize_map(occupancy_map):
     fig = plt.figure(figsize=(15, 15))
     mng = plt.get_current_fig_manager()
     plt.ion()
-    x_locs = [600]
-    y_locs = [150]
-    scat = plt.scatter(x_locs, y_locs, c='b', marker='o', alpha=0.2)
+    x_locs = [800]
+    y_locs = [600]
+
+    x_locs_2 = [400]
+    y_locs_2 = [300]
+
+    scat = plt.scatter(x_locs_2, y_locs_2, c='b', marker='o', alpha=0.2)
     d = 2
-    arrow_plot = plt.quiver(x_locs, y_locs, d * np.cos(0), d * np.sin(0))
+    arrow_plot = plt.quiver(x_locs_2, y_locs_2, d * np.cos(0), d * np.sin(0))
 
     a = np.load('./raycast_lookup/complete.npz')
     lookup = a['arr']
@@ -68,7 +74,7 @@ def get_ray_cast_per_square(start_pos_x, grid_discretize, map_shape_axis_1):
             dummy_particles[:,1] = (ypos) * 10
             dummy_particles[:,2] = 0
 
-            raycast_vals = sensor_model.ray_casting_vectorized(dummy_particles)
+            raycast_vals = sensor_model.ray_casting_vectorized_centimeters(dummy_particles)
             raycast_lookup[xpos][ypos] = raycast_vals[0,:]
 
     name = os.path.join('./raycast_lookup', str(start_pos_x))
@@ -103,24 +109,28 @@ if __name__ == '__main__':
     map_obj = MapReader(src_path_map)
     occupancy_map = map_obj.get_map()
     logfile = open(src_path_log, 'r')
-    visualize_map(occupancy_map)
 
-    motion_model = MotionModel()
-    sensor_model = SensorModel(occupancy_map)
+    if VISUALIZE:
+        visualize_map(occupancy_map)
 
-    particle_processor = ParticleProcessor(motion_model=motion_model, sensor_model=sensor_model)
-    resampler = Resampling()
+    else:
+        motion_model = MotionModel()
+        sensor_model = SensorModel(occupancy_map)
 
-    raycast_lookup = np.zeros((occupancy_map.shape[0], occupancy_map.shape[1], 360, 180), dtype=np.float16)
-    grid_discretize = 10
+        particle_processor = ParticleProcessor(motion_model=motion_model, sensor_model=sensor_model)
+        resampler = Resampling()
 
-    # multiprocessing.set_start_method('forkserver', force=True)
-    # TODO: Check which number of processes is fastest, not just max
-    pool = multiprocessing.Pool(processes=12)
+        grid_discretize = 5
 
-    items = [(xpos, grid_discretize, occupancy_map.shape[1]) for xpos in range(0, occupancy_map.shape[0], grid_discretize)]
-    pool.starmap(get_ray_cast_per_square, items)
-    print("done")
-    pool.join()
-    pool.close()
+        # multiprocessing.set_start_method('forkserver', force=True)
+        # TODO: Check which number of processes is fastest, not just max
+        pool = multiprocessing.Pool(processes=12)
+
+        lookup_resolution = [occupancy_map.shape[0]*2, occupancy_map.shape[1]*2]
+        print(f"running raycasting on map of resolution {lookup_resolution}")
+
+        items = [(xpos, grid_discretize, lookup_resolution[1]) for xpos in range(0, lookup_resolution[0], grid_discretize)]
+        pool.starmap(get_ray_cast_per_square, items)
+        print("done")
+        pool.join()
 
