@@ -23,34 +23,32 @@ import time
 import ipdb
 import multiprocessing
 
-VISUALIZE = True
+VISUALIZE = False
+MAP_SAMPLING_MULTIPLIER = 2
+MAP_TO_CARTESIAN_MULTIPLIER = 10/MAP_SAMPLING_MULTIPLIER
 
 def visualize_map(occupancy_map):
     fig = plt.figure(figsize=(15, 15))
     mng = plt.get_current_fig_manager()
     plt.ion()
-    x_locs = [800]
-    y_locs = [600]
+    x_locs = [450]
+    y_locs = [300]
 
-    x_locs_2 = [400]
-    y_locs_2 = [300]
-
-    scat = plt.scatter(x_locs_2, y_locs_2, c='b', marker='o', alpha=0.2)
+    scat = plt.scatter(x_locs, y_locs, c='b', marker='o', alpha=0.2)
     d = 2
-    arrow_plot = plt.quiver(x_locs_2, y_locs_2, d * np.cos(0), d * np.sin(0))
+    arrow_plot = plt.quiver(x_locs, y_locs, d * np.cos(0), d * np.sin(0))
 
     a = np.load('./raycast_lookup/complete.npz')
     lookup = a['arr']
     look = lookup[x_locs[0], y_locs[0], :]
-
 
     xs, ys = [], []
     for angle, ray in enumerate(look):
         rad = np.radians(angle)
 
         print(ray)
-        x = x_locs[0] + np.cos(rad - np.pi / 2) * (ray/10)
-        y = y_locs[0] + np.sin(rad - np.pi / 2) * (ray/10)
+        x = x_locs[0] + np.cos(rad) * (ray/10)
+        y = y_locs[0] + np.sin(rad) * (ray/10)
         xs.append(x)
         ys.append(y)
 
@@ -59,19 +57,23 @@ def visualize_map(occupancy_map):
     plt.axis([0, 800, 0, 800])
     plt.waitforbuttonpress()
 
+
 def get_ray_cast_per_square(start_pos_x, grid_discretize, map_shape_axis_1):
     print(f"computing grid cell {start_pos_x}")
+    # raycast_lookup defines the size of this slice of the graph on which we will do raycasting
+    # NOTE: RAYCAST_LOOKUP = 5x1600x360
+    # NOTE: 1600 = Map resolution in cartesian coordinates(8000) * 0.2
     raycast_lookup = np.zeros((grid_discretize, map_shape_axis_1, 360), dtype=np.float16)
 
     for xpos in range(raycast_lookup.shape[0]):
         for ypos in range(raycast_lookup.shape[1]):
-            # print("finished yaw angle")
             # use ray casting to find the range_finders simulated readings at this robot pose
 
             # to make use of vectorized ray casting, init some dummy particles
+            # THE MAP_TO_CARTESIAN_MULTIPLIER = 5 at the moment
             dummy_particles = np.ones((1,3))
-            dummy_particles[:,0] = (xpos + start_pos_x) * 10
-            dummy_particles[:,1] = (ypos) * 10
+            dummy_particles[:,0] = (xpos + start_pos_x) * MAP_TO_CARTESIAN_MULTIPLIER
+            dummy_particles[:,1] = (ypos) * MAP_TO_CARTESIAN_MULTIPLIER
             dummy_particles[:,2] = 0
 
             raycast_vals = sensor_model.ray_casting_vectorized_centimeters(dummy_particles)
@@ -126,8 +128,11 @@ if __name__ == '__main__':
         # TODO: Check which number of processes is fastest, not just max
         pool = multiprocessing.Pool(processes=12)
 
-        lookup_resolution = [occupancy_map.shape[0]*2, occupancy_map.shape[1]*2]
-        print(f"running raycasting on map of resolution {lookup_resolution}")
+        # define resolution of the lookup table (keep min resolution = 2x that of occupancy map in cartesian)
+        lookup_resolution = [occupancy_map.shape[0]*MAP_SAMPLING_MULTIPLIER, occupancy_map.shape[1]*MAP_SAMPLING_MULTIPLIER]
+
+        print(f"running raycasting on map of resolution \
+                {lookup_resolution} = 1/{MAP_TO_CARTESIAN_MULTIPLIER} * MAP_RES in cartesian(8000x8000)")
 
         items = [(xpos, grid_discretize, lookup_resolution[1]) for xpos in range(0, lookup_resolution[0], grid_discretize)]
         pool.starmap(get_ray_cast_per_square, items)
