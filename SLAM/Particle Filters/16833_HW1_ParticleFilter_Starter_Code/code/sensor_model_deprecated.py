@@ -10,7 +10,7 @@ import time
 from matplotlib import pyplot as plt
 from scipy.stats import norm
 
-from map_reader import MapReader
+from map_reader_deprecated import MapReader
 
 
 class SensorModel:

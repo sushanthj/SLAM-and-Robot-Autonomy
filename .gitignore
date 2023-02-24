@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# numpy files
+*.npz
+./SLAM/Particle Filters/16833_HW1_ParticleFilter_Starter_Code/code/lookup_backup*
+
 # Distribution / packaging
 .Python
 build/
