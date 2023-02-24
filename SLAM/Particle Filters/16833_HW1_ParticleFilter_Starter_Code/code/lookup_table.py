@@ -10,7 +10,7 @@ class LookupTable:
         self._discretization = discretization
 
         binary = np.load(self._filename)
-        self._resolution = 10
+        self._resolution = 5
         self._arr = binary['arr']
 
     def lookup(self, xs, ys, yaws):

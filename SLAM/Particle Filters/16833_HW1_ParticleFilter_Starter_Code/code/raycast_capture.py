@@ -23,7 +23,7 @@ import time
 import ipdb
 import multiprocessing
 
-VISUALIZE = False
+VISUALIZE = True
 MAP_SAMPLING_MULTIPLIER = 2
 ORIGINAL_OCCUPANCY_MAP_RESOLUTION = 10
 MAP_TO_CARTESIAN_MULTIPLIER = ORIGINAL_OCCUPANCY_MAP_RESOLUTION/MAP_SAMPLING_MULTIPLIER
@@ -32,8 +32,8 @@ def visualize_map(occupancy_map):
     fig = plt.figure(figsize=(15, 15))
     mng = plt.get_current_fig_manager()
     plt.ion()
-    x_locs = [450]
-    y_locs = [300]
+    x_locs = [600]
+    y_locs = [150]
 
     scat = plt.scatter(x_locs, y_locs, c='b', marker='o', alpha=0.2)
     d = 2
@@ -41,7 +41,7 @@ def visualize_map(occupancy_map):
 
     a = np.load('./raycast_lookup/complete.npz')
     lookup = a['arr']
-    look = lookup[x_locs[0], y_locs[0], :]
+    look = lookup[x_locs[0]*2, y_locs[0]*2, :]
 
     xs, ys = [], []
     for angle, ray in enumerate(look):
@@ -136,7 +136,8 @@ if __name__ == '__main__':
                 {lookup_resolution} = 1/{MAP_TO_CARTESIAN_MULTIPLIER} * MAP_RES in cartesian(8000x8000)")
 
         items = [(xpos, grid_discretize, lookup_resolution[1]) for xpos in range(0, lookup_resolution[0], grid_discretize)]
+        # print(items)
         pool.starmap(get_ray_cast_per_square, items)
         print("done")
-        pool.join()
+        pool.close()
 

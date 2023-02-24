@@ -18,7 +18,7 @@ from matplotlib import figure as fig
 import time
 import ipdb
 
-DEAD_RECKONING = False
+DEAD_RECKONING = True
 
 def visualize_map(occupancy_map):
     fig = plt.figure()

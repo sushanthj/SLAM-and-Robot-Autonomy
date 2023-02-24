@@ -9,7 +9,7 @@ import math
 import time
 
 import torch
-from chamferdist import ChamferDistance
+# from chamferdist import ChamferDistance
 from matplotlib import pyplot as plt
 from scipy.stats import norm, expon, uniform
 
@@ -18,7 +18,7 @@ from lookup_table import LookupTable
 
 DEBUG = True
 
-chamfer_distance = ChamferDistance()
+# chamfer_distance = ChamferDistance()
 
 
 def norm_pdf(z, z_star, sigma):
