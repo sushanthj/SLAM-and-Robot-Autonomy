@@ -42,10 +42,10 @@ class MotionModel:
         """
 
         # Too damn high.
-        self._alpha1 = 0.00002  # associated with heading angle
-        self._alpha2 = 0.00002
-        self._alpha3 = 0.0002 # associated with the wheel odom.
-        self._alpha4 = 0.0002
+        self._alpha1 = 0.00002 * 1000 # associated with heading angle
+        self._alpha2 = 0.00002 * 1000
+        self._alpha3 = 0.0002 * 1 # associated with the wheel odom.
+        self._alpha4 = 0.0002 * 1
 
     def update(self, u_t0, u_t1, x_t0):
         """

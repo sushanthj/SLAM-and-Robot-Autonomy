@@ -54,8 +54,8 @@ def visualize_timestep(X_bar, tstep, z_t, output_path, sensor_model: Optional[Se
             X_t1_test = np.array([[X_bar[:, 0].mean(), X_bar[:, 1].mean(), yaw]])
             angles = np.radians(np.array(list(range(-90, 90, sensor_model._discretization)))) + X_bar[:, 2].mean()  # Might be this?
             Z_star_t_arr = sensor_model.lookup(X_t1_test)
-            x_beams = X_t1_test[0][0] + Z_star_t_arr[0] * np.cos(angles) * 10
-            y_beams = X_t1_test[0][1] + Z_star_t_arr[0] * np.sin(angles) * 10
+            x_beams = X_t1_test[0][0] + Z_star_t_arr[0] * np.cos(angles)
+            y_beams = X_t1_test[0][1] + Z_star_t_arr[0] * np.sin(angles)
 
             # yaw = X_bar[:, 2].mean()
             # yaw = limit_angle(yaw)
@@ -185,9 +185,9 @@ if __name__ == '__main__':
     parser.add_argument('--output', default='results')
     parser.add_argument('--num_particles', default=5000, type=int)
     parser.add_argument('--decrease_factor', default=0.95, type=float)
-    parser.add_argument('--num_particles_min', default=1000, type=int)
+    parser.add_argument('--num_particles_min', default=500, type=int)
     parser.add_argument('--results_dir_suffix', default='./results', type=str)
-    parser.add_argument('--seed', default=20098, type=str)
+    parser.add_argument('--seed', default=None, type=str)
     parser.add_argument('--visualize', default=True, action='store_true')
     args = parser.parse_args()
 

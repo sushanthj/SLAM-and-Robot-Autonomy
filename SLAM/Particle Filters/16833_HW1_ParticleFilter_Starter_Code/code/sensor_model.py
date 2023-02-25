@@ -56,7 +56,7 @@ class SensorModel:
         # self._z_max = 0.01
         # self._z_rand = 300 # Might want to increase it
 
-        self._sigma_hit = 100
+        self._sigma_hit = 10
         self._lambda_short = 0.12 # Small values smoother curve?
 
         # Used in p_max and p_rand, optionally in ray casting
@@ -379,10 +379,13 @@ class SensorModel:
         Y = np.clip(np.round(X_t1[:, 1] / 10).astype(int), 0, 799)
 
         belief = pdf_hit + pdf_short + pdf_max + pdf_rand
+        print("belief shape before", belief.shape)
+
         # belief = np.sum(np.log(belief), axis=1)
         # belief = np.exp(belief)
 
         belief = np.sum(belief, axis=1)
+        print("belief shape after", belief.shape)
 
         # A particle cannot fall on an occupied area or an unknown area, assign zero likelihood on that.
         pruned_belief = np.where(np.logical_or(self._occupancy_map[Y, X] == -1,
