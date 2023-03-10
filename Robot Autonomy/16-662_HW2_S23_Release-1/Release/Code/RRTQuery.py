@@ -118,13 +118,47 @@ def RRTQuery():
 
 		# TODO : Fill in the algorithm here
 		# create a random node (x,y as a 2,1 array)
-		qRand = np.random.uniform(0,1,[2,1])
+		qRand = mybot.SampleRobotConfig()
 
 		# introduce the goal bias. (set the random node as goal with a certain prob)
-		if np.random.uniform(0,1) < 0.05:
+		if np.random.uniform(0,1) < thresh:
 			qRand = qGoal
 
-		
+		idNear = FindNearest(rrtVertices, qRand)
+		qNear = rrtVertices[idNear]
+
+		qNear, qRand = np.asarray(qNear), np.asarray(qRand)
+
+		# if it's above threshold, move in the direction of the new node, but only upto the
+		# threshold (which limits max distance between two nodes)
+		while np.linalg.norm(qRand - qNear) > thresh:
+			# qConnect = qNear + thres * unit_vector_pointing_towards_qRand
+			qConnect = qNear + thresh * ((qRand-qNear) / np.linalg.norm(qRand-qNear))
+
+			if not mybot.DetectCollisionEdge(qConnect, qNear, pointsObs, axesObs):
+				rrtVertices.append(qConnect)
+				rrtEdges.append(idNear)
+				qNear = qConnect
+
+			else:
+				break
+
+		# check for collisions
+		qConnect = qRand
+		if not mybot.DetectCollisionEdge(qConnect, qNear, pointsObs, axesObs):
+			# if no collision in new joint angles (qConnect), then add as a valid node and edge
+			rrtVertices.append(qConnect)
+			rrtEdges.append(idNear)
+
+		# check if the qGoal is close to some node
+		idNear = FindNearest(rrtVertices, qGoal)
+		# if the qGoal is really close (< 0.025) then we've pretty much reached goal!
+		if np.linalg.norm(np.asarray(qGoal) - np.asarray(rrtVertices[idNear])) < 0.025:
+			# add the goal node as our final node
+			rrtVertices.append(qGoal)
+			rrtEdges.append(idNear)
+			print("SOLUTION FOUND")
+			FoundSolution = True
 
 		print(len(rrtVertices))
 
