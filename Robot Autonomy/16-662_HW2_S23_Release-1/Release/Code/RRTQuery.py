@@ -118,34 +118,29 @@ def RRTQuery():
 
 		# TODO : Fill in the algorithm here
 		# create a random node (x,y as a 2,1 array)
+		# print(type(qGoal))
 		qRand = mybot.SampleRobotConfig()
+		# print(type(qRand))
 
 		# introduce the goal bias. (set the random node as goal with a certain prob)
-		if np.random.uniform(0,1) < thresh:
+		if np.random.uniform(0,1) < 0.05:
 			qRand = qGoal
 
 		idNear = FindNearest(rrtVertices, qRand)
 		qNear = rrtVertices[idNear]
-
-		qNear, qRand = np.asarray(qNear), np.asarray(qRand)
+		# print("idNear is", idNear)
 
 		# if it's above threshold, move in the direction of the new node, but only upto the
 		# threshold (which limits max distance between two nodes)
-		while np.linalg.norm(qRand - qNear) > thresh:
-			# qConnect = qNear + thres * unit_vector_pointing_towards_qRand
-			qConnect = qNear + thresh * ((qRand-qNear) / np.linalg.norm(qRand-qNear))
-
-			if not mybot.DetectCollisionEdge(qConnect, qNear, pointsObs, axesObs):
-				rrtVertices.append(qConnect)
-				rrtEdges.append(idNear)
-				qNear = qConnect
-
-			else:
-				break
+		if np.linalg.norm(np.asarray(qRand) - np.asarray(qNear)) > thresh:
+			# qConnect = qNear + unit_vector along new node's direction
+			qConnect = np.array(qNear) + (thresh*(np.array(qRand)-np.array(qNear)) /
+				 				np.linalg.norm(np.asarray(qRand) - np.asarray(qNear)))
+		else:
+			qConnect = qRand
 
 		# check for collisions
-		qConnect = qRand
-		if not mybot.DetectCollisionEdge(qConnect, qNear, pointsObs, axesObs):
+		if not mybot.DetectCollision(qConnect, pointsObs=pointsObs, axesObs=axesObs):
 			# if no collision in new joint angles (qConnect), then add as a valid node and edge
 			rrtVertices.append(qConnect)
 			rrtEdges.append(idNear)
