@@ -165,18 +165,24 @@ def RRTQuery():
 	### if a solution was found
 	if FoundSolution:
 		# Extract path
-		c=-1 #Assume last added vertex is at goal
+		c=-1 # Assume last added vertex is at goal
 		plan.insert(0, rrtVertices[c])
 
+		print("rrtEdges are \n", rrtEdges)
+		print("***************")
+
 		while True:
+			# print("c before", c)
 			c=rrtEdges[c]
+			# print("c after", c)
 			plan.insert(0, rrtVertices[c])
 			if c==0:
 				break
 
 		for i in range(150):
-			# TODO - Path shortening
-			pass
+			anchorA = np.random.randint(0, len(plan)-2)
+			anchorB = np.random.randint(anchorA+1, len(plan)-1)
+			
 
 		for (i, q) in enumerate(plan):
 			print("Plan step: ", i, "and joint: ", q)

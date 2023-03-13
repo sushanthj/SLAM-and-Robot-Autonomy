@@ -1,14 +1,14 @@
-'''
-    Initially written by Ming Hsiao in MATLAB
-    Adapted to Python by Akash Sharma (akashsharma@cmu.edu), 2020
-    Updated by Wei Dong (weidong@andrew.cmu.edu), 2021
-'''
+"""
+Initially written by Ming Hsiao in MATLAB
+Adapted to Python by Akash Sharma (akashsharma@cmu.edu), 2020
+Updated by Wei Dong (weidong@andrew.cmu.edu), 2021
+"""
 
 import numpy as np
 import re
 import matplotlib.pyplot as plt
+import math
 np.set_printoptions(suppress=True, threshold=np.inf, linewidth=np.inf)
-
 
 def draw_cov_ellipse(mu, cov, color):
     """
@@ -83,29 +83,77 @@ def warp2pi(angle_rad):
     """
     TODO: warps an angle in [-pi, pi]. Used in the update step.
 
-    \param angle_rad Input angle in radius
-    \return angle_rad_warped Warped angle to [-\pi, \pi].
+    param angle_rad = Input angle in radians
+    return angle_rad_warped = Warped angle to [-\pi, \pi].
     """
+    if angle_rad > np.pi:
+        while (angle_rad > np.pi):
+            angle_rad -= 2*np.pi
+
+    else:
+        while (angle_rad < -np.pi):
+            angle_rad += 2*np.pi
+
     return angle_rad
 
 
 def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
     '''
-    TODO: initialize landmarks given the initial poses and measurements with their covariances
-    \param init_measure Initial measurements in the form of (beta0, l0, beta1, l1, ...).
-    \param init_measure_cov Initial covariance matrix of shape (2, 2) per landmark given parameters.
-    \param init_pose Initial pose vector of shape (3, 1).
-    \param init_pose_cov Initial pose covariance of shape (3, 3) given parameters.
+    Here we find:
+    1. Number of landmarks (k)
+    2. landmark states (just position (2k,1)) which will get stacked onto
+       robot pose
+    3. Covariance of landmark pose estimations pg 249. (or pg314) Line 17. (H_t @ Σ̄_t @ H_t.T)
 
-    \return k Number of landmarks.
-    \return landmarks Numpy array of shape (2k, 1) for the state.
-    \return landmarks_cov Numpy array of shape (2k, 2k) for the uncertainty.
+    input1 init_measure    :  Initial measurements of form (beta0, l0, beta1,...) (2k,1)
+    input2 init_measure_cov:  Initial covariance matrix of shape (2, 2) per landmark given parameters.
+    input3 init_pose       :  Initial pose vector of shape (3, 1).
+    input4 init_pose_cov   :  Initial pose covariance of shape (3, 3) given parameters.
+
+    return1 k              : Number of landmarks.
+    return2 landmarks      : Numpy array of shape (2k, 1) for the state.
+    return3 landmarks_cov  : Numpy array of shape (2k, 2k) for the uncertainty.
+
+    Note. landmark_cov was the 2x2 covariance we found in the theory section H_l
     '''
 
     k = init_measure.shape[0] // 2
 
     landmark = np.zeros((2 * k, 1))
-    landmark_cov = np.zeros((2 * k, 2 * k))
+    landmark_cov = np.zeros((2 * k, 2 * k)) # H_l from theory section
+
+    # to get H_l, we need [x_t, y_t and theta_t] from robot state vector
+    x_t = init_pose[0][0]
+    y_t = init_pose[1][0]
+    theta_t = init_pose[2][0]
+
+    # to find the covaraince of all landmark poses H_l, we need to iterate over each landmark
+    # and start filling in landmark_cov array initialized above. (we'll fill in diagonal
+    # components only)
+    for l_i in range(k):
+        # l_i is the i'th landmark
+        # init_measure.shape = (2k,1)
+        beta = init_measure[l_i*2][0]
+        l_range = init_measure[l_i*2 + 1][0]
+
+        # need to find landmark location in global coords (l_x, l_y) to find H_l
+        l_x = x_t + l_range*(np.cos(beta+theta_t))
+        l_y = y_t + l_range*(np.sin(beta+theta_t))
+
+        landmark[l_i*2][0] = l_x
+        landmark[l_i*2+1][0] = l_y
+
+        # define q which will be used in finding H_l (mentioned in theory section)
+        q = (l_x - x_t)**2 + (l_y - y_t)**2
+        q_root = math.sqrt(q)
+
+        H_l = np.array([ [((l_x - x_t)/q_root), ((l_y - y_t)/q_root)],
+                         [-((l_y - y_t)/q_root), ((l_x - x_t)/q_root)]])
+        #NOTE: we are ignoring multiplying H_l * F_x_t (line15 in EKF pg. 257)
+
+        assert(H_l.shape == (2,2))
+
+        landmark_cov[l_i*2:l_i*2+2, l_i*2:l_i*2+2] = H_l @ init_measure_cov @ H_l.T
 
     return k, landmark, landmark_cov
 
@@ -122,8 +170,9 @@ def predict(X, P, control, control_cov, k):
     \return X_pre Predicted X state of shape (3 + 2k, 1).
     \return P_pre Predicted P covariance of shape (3 + 2k, 3 + 2k).
     '''
+    
 
-    return X, P
+    return X_pred, P_pred
 
 
 def update(X_pre, P_pre, measure, measure_cov, k):
@@ -160,11 +209,11 @@ def evaluate(X, P, k):
 
 def main():
     # TEST: Setup uncertainty parameters
-    sig_x = 0.25;
-    sig_y = 0.1;
-    sig_alpha = 0.1;
-    sig_beta = 0.01;
-    sig_r = 0.08;
+    sig_x = 0.25
+    sig_y = 0.1
+    sig_alpha = 0.1
+    sig_beta = 0.01
+    sig_r = 0.08
 
 
     # Generate variance from standard deviation
@@ -178,6 +227,13 @@ def main():
     data_file = open("../data/data.txt")
     line = data_file.readline()
     fields = re.split('[\t ]', line)[:-1]
+    """
+    The data file is extracted as arr and is given to init_landmarks below
+
+    The data file has 2 types of entries:
+    1. landmarks [β 1 r 1 β 2 r 2 · · · ], where β_i , r_i correspond to landmark
+    2. control inputs in form of [d, alpha] (d = translation along x-axis)
+    """
     arr = np.array([float(field) for field in fields])
     measure = np.expand_dims(arr, axis=1)
     t = 1
@@ -187,17 +243,37 @@ def main():
     measure_cov = np.diag([sig_beta2, sig_r2])
 
     # Setup the initial pose vector and pose uncertainty
+    # pose vector is initialized to zero
     pose = np.zeros((3, 1))
     pose_cov = np.diag([0.02**2, 0.02**2, 0.1**2])
 
     ##########
     # TODO: initialize landmarks
+    """
+    measure = all landmarks
+    measure_cov = known sensor covariance
+    pose = initialized to (0,0)
+    pose_cov = how much we trust motion model = fixed
+    """
     k, landmark, landmark_cov = init_landmarks(measure, measure_cov, pose,
-                                               pose_cov)
+                                               pose_cov) # basically H_t in for-loop of pg 204
 
     # Setup state vector X by stacking pose and landmark states
-    # Setup covariance matrix P by expanding pose and landmark covariances
+    # X = [x_t, y_t, thetha_t, landmark1(range), landmark1(bearing), landmark2(range)...]
     X = np.vstack((pose, landmark))
+
+    # Setup covariance matrix P by expanding pose and landmark covariances
+    """
+    - The covariance matrix for a state vector = [x,y,thetha] would be 3x3
+    - However, since we also add landmarks into the state vector, we need to add that as well
+    - Since there are 2*k landmarks, we create a new matrix encapsulating pose_cov and landmark_cov
+
+    - this new cov matrix (constructed by np.block) is:
+
+        [[pose_cov,        0     ],
+         [    0,     landmark_cov]]
+
+    """
     P = np.block([[pose_cov, np.zeros((3, 2 * k))],
                   [np.zeros((2 * k, 3)), landmark_cov]])
 
