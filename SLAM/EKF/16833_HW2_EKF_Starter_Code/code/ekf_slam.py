@@ -213,6 +213,38 @@ def predict(X, P, control, control_cov, k):
 
     return X_pred, P_pred
 
+def update_yash(X_pre, P_pre, measure, measure_cov, k):
+
+    z = np.zeros((2*k,1))
+    Ht = np.zeros((2*k, 3 + 2*k))
+    Q = np.zeros((2*k, 2*k))
+
+    for i in range(k):
+        dx = float(X_pre[3+2*i]-X_pre[0])
+        dy = float(X_pre[4+2*i]-X_pre[1])
+
+        z[2*i+1] = float(np.sqrt(dx**2 + dy**2))
+        z[2*i] = warp2pi(np.arctan2(dy,dx) - X_pre[2])
+
+        #! You've fucked up here, you reveresed the order
+        Hp = [[float(-dx/np.sqrt(dy**2+dx**2)), float(-dy/np.sqrt(dy**2+dx**2)), 0], 
+             [float(dy/(dy**2+dx**2)), float(-dx/(dy**2+dx**2)), -1]]
+        Hl = [[float(dx/np.sqrt(dy**2+dx**2)), float(dy/np.sqrt(dy**2+dx**2))],
+              [float(-dy/(dy**2+dx**2)), float(dx/(dy**2+dx**2))]]
+        #! You also need to include this 0:3 part
+        Ht[2*i:2*(i+1),0:3] = Hp
+        Ht[2*i:2*(i+1),3+2*i:5+2*i] = Hl
+        Q[i*2:i*2+2, i*2:i*2+2] = measure_cov
+
+    # instead of doing this line below, you can just do the line above
+    # Q = block_diag(measure_cov, measure_cov, measure_cov, measure_cov, measure_cov, measure_cov)
+    K = P_pre @ (Ht.T) @ np.linalg.inv((Ht @ P_pre @ (Ht.T)) + Q)
+
+    X_pre = X_pre + K @ (measure - z)
+    I = np.identity(3+2*k)
+    P_pre = (I - (K @ Ht)) @ P_pre
+
+    return X_pre, P_pre
 
 def update(X_pre, P_pre, measure, measure_cov, k):
     '''
@@ -312,13 +344,31 @@ def evaluate(X, P, k):
 
     \return None
     '''
+    # given: true x,y coords of landmarks in global frame
     l_true = np.array([3, 6, 3, 12, 7, 8, 7, 14, 11, 6, 11, 12], dtype=float)
 
-    e_dist = np.zeros(shape=l_true.shape, dtype=float)
-    m_dist = np.zeros(shape=l_true.shape, dtype=float)
+    e_dist = np.zeros(shape=k, dtype=np.float64)
+    m_dist = np.zeros(shape=k, dtype=np.float64)
 
     for i in range(k):
-        euclidean_dist = 0
+        l_true_x, l_true_y = l_true[2*i], l_true[2*i+1]
+        # X has [x, y, theta, l_x, l_y, l_x2, l_y2, ....] therefore we iterate with +3 offset
+        pred_x, pred_y = X[3+2*i], X[4+2*i]
+        e_dist[i] = math.sqrt( (float(l_true_x-pred_x))**2 + (float(l_true_y-pred_y))**2 )
+
+        # Mahalanobis distance = math.sqrt[(x - mean).T @ covariance @ (x - mean)]
+        # The covariance for each landmark is 2x2, therefore our (x-mean) vector should be 2x1
+        # (2x1) because we multiply matrices from the right, hence last two terms in
+        # mahalanobis distance will be = 2x2 @ 2x1 which will result in = 2x1
+        diff = np.array([[float(l_true_x - pred_x)], [float(l_true_y - pred_y)]])
+        assert(diff.shape == (2,1))
+
+        # P matrix is diagonal, with the first three diagonal entries being for pose which
+        # isn't required here. Therefore, here too we offset for that
+        m_dist[i] = float(np.sqrt(diff.T @ np.linalg.inv(P[3+2*i:5+2*i, 3+2*i:5+2*i]) @ diff))
+
+    print("Euclidean distances are \n", e_dist)
+    print("Mahalanobis distances are \n", m_dist)
 
     plt.scatter(l_true[0::2], l_true[1::2])
     plt.draw()
@@ -373,6 +423,7 @@ def main():
     """
     k, landmark, landmark_cov = init_landmarks(measure, measure_cov, pose,
                                                pose_cov) # basically H_t in for-loop of pg 204
+    print("Orig K is", k)
 
     # Setup state vector X by stacking pose and landmark states
     # X = [x_t, y_t, thetha_t, landmark1(range), landmark1(bearing), landmark2(range)...]
@@ -424,6 +475,7 @@ def main():
             t += 1
 
     # EVAL: Plot ground truth landmarks and analyze distances
+    print("K is", k)
     evaluate(X, P, k)
 
 
