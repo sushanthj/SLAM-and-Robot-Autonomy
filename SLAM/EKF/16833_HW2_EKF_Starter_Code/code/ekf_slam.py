@@ -8,6 +8,8 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import math
+import ipdb
+from copy import deepcopy
 np.set_printoptions(suppress=True, threshold=np.inf, linewidth=np.inf)
 
 def draw_cov_ellipse(mu, cov, color):
@@ -22,8 +24,8 @@ def draw_cov_ellipse(mu, cov, color):
     a, b = s[0], s[1]
     vx, vy = U[0, 0], U[0, 1]
     theta = np.arctan2(vy, vx)
-    R = np.array([[np.cos(theta), -np.sin(theta)],
-                  [np.sin(theta), np.cos(theta)]])
+    R = np.array([[float(np.cos(theta)), -float(np.sin(theta))],
+                  [float(np.sin(theta)), float(np.cos(theta))]])
     phi = np.arange(0, 2 * np.pi, np.pi / 50)
     rot = []
     for i in range(100):
@@ -103,31 +105,28 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
     1. Number of landmarks (k)
     2. landmark states (just position (2k,1)) which will get stacked onto
        robot pose
-    3. Covariance of landmark pose estimations pg 249. (or pg314) Line 17. (H_t @ Σ̄_t @ H_t.T)
+    3. Covariance of landmark pose estimations (see theory)
 
     input1 init_measure    :  Initial measurements of form (beta0, l0, beta1,...) (2k,1)
-    input2 init_measure_cov:  Initial covariance matrix of shape (2, 2) per landmark given parameters.
+    input2 init_measure_cov:  Initial covariance matrix (2, 2) per landmark given parameters.
     input3 init_pose       :  Initial pose vector of shape (3, 1).
     input4 init_pose_cov   :  Initial pose covariance of shape (3, 3) given parameters.
 
     return1 k              : Number of landmarks.
     return2 landmarks      : Numpy array of shape (2k, 1) for the state.
     return3 landmarks_cov  : Numpy array of shape (2k, 2k) for the uncertainty.
-
-    Note. landmark_cov was the 2x2 covariance we found in the theory section H_l
     '''
 
     k = init_measure.shape[0] // 2
 
-    landmark = np.zeros((2 * k, 1))
-    landmark_cov = np.zeros((2 * k, 2 * k)) # H_l from theory section
+    landmark = np.zeros((2*k, 1))
+    landmark_cov = np.zeros((2*k, 2*k))
 
-    # to get H_l, we need [x_t, y_t and theta_t] from robot state vector
     x_t = init_pose[0][0]
     y_t = init_pose[1][0]
     theta_t = init_pose[2][0]
 
-    # to find the covaraince of all landmark poses H_l, we need to iterate over each landmark
+    # to find the covaraince of all landmark poses, we need to iterate over each landmark
     # and start filling in landmark_cov array initialized above. (we'll fill in diagonal
     # components only)
     for l_i in range(k):
@@ -137,23 +136,30 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
         l_range = init_measure[l_i*2 + 1][0]
 
         # need to find landmark location in global coords (l_x, l_y) to find H_l
-        l_x = x_t + l_range*(np.cos(beta+theta_t))
-        l_y = y_t + l_range*(np.sin(beta+theta_t))
+        l_x = x_t + l_range*(float(np.cos(beta+theta_t)))
+        l_y = y_t + l_range*(float(np.sin(beta+theta_t)))
 
         landmark[l_i*2][0] = l_x
         landmark[l_i*2+1][0] = l_y
 
-        # define q which will be used in finding H_l (mentioned in theory section)
-        q = (l_x - x_t)**2 + (l_y - y_t)**2
-        q_root = math.sqrt(q)
+        # Note, L here is the derivative of (l_x,l_y) vector (sensor model) w.r.t beta and theta
+        # G_l is the derivative of same sensor model w.r.t state varialbes (x,y,theta)
+        L = np.array([[-l_range*float(np.sin(beta+theta_t)), float(np.cos(beta+theta_t))],
+                      [l_range*float(np.cos(beta+theta_t)), float(np.sin(beta+theta_t))]])
 
-        H_l = np.array([ [((l_x - x_t)/q_root), ((l_y - y_t)/q_root)],
-                         [-((l_y - y_t)/q_root), ((l_x - x_t)/q_root)]])
-        #NOTE: we are ignoring multiplying H_l * F_x_t (line15 in EKF pg. 257)
+        # G_l represents the robot pose aspect of landmark measurement
+        # therefore when measuring covariance, it will use robot pose covariance
+        G_l = np.array([[1, 0, -l_range*float(np.sin(theta_t + beta))],
+                        [0, 1, l_range*float(np.cos(theta_t + beta))]])
 
-        assert(H_l.shape == (2,2))
+        # See theory, L below was derived w.r.t to measurement. Therefore,
+        # during covariance calculation it will use measurement_covariance
+        # Similarly, G defined w.r.t state variables (x,y,theta) therefore uses pose_covariance
+        pred_landmark_cov = (G_l @ init_pose_cov @ G_l.T) + (L @ init_measure_cov @ L.T)
 
-        landmark_cov[l_i*2:l_i*2+2, l_i*2:l_i*2+2] = H_l @ init_measure_cov @ H_l.T
+        assert(pred_landmark_cov.shape == (2,2))
+
+        landmark_cov[l_i*2:l_i*2+2, l_i*2:l_i*2+2] = pred_landmark_cov
 
     return k, landmark, landmark_cov
 
@@ -164,13 +170,46 @@ def predict(X, P, control, control_cov, k):
     \param X State vector of shape (3 + 2k, 1) stacking pose and landmarks.
     \param P Covariance matrix of shape (3 + 2k, 3 + 2k) for X.
     \param control Control signal of shape (2, 1) in the polar space that moves the robot.
-    \param control_cov Control covariance of shape (3, 3) in the (x, y, theta) space given the parameters.
+    \param control_cov Control covariance shape (3, 3) in the (x, y, theta) space.
     \param k Number of landmarks.
 
     \return X_pre Predicted X state of shape (3 + 2k, 1).
     \return P_pre Predicted P covariance of shape (3 + 2k, 3 + 2k).
     '''
-    
+    # TODO: Predict new position (mean) using control inputs (only geometrical, no cov here)
+    theta_curr = X[2][0]
+
+    d_t = control[0][0] # control input in robot's local frame's x-axis
+    alpha_t = control[1][0]
+
+    P_pred = deepcopy(P)
+    pos_cov = deepcopy(P[0:3,0:3])
+
+    X_pred = np.zeros(shape=X.shape)
+    X_pred[0][0] += d_t*np.cos(theta_curr)
+    X_pred[1][0] += d_t*np.sin(theta_curr)
+    X_pred[2][0] += alpha_t
+
+    X_pred = X_pred + X
+
+    # TODO: Predict new uncertainity (covariance) using motion model noise, find G_t and R_t
+    # NOTE: G_t needs to be mulitplied with P viz of shape (3 + 2k, 3+ 2k), because it has
+    # pose and measurement cov. IN THIS STEP OF PREDICTION WE ONLY UPDATE POSE COV
+    # Therefore G_t and R_t can be 3x3 (3 variables in state vector)
+
+    G_t = np.array([[1, 0,  -d_t*float(np.sin(theta_curr))],
+                    [0, 1,   d_t*float(np.cos(theta_curr))],
+                    [0, 0,                1               ]])
+
+    rotation_matrix_z = np.array([[float(np.cos(theta_curr)), -float(np.sin(theta_curr)), 0],
+                                  [float(np.sin(theta_curr)),  float(np.cos(theta_curr)), 0],
+                                  [           0,                            0,            1]])
+
+    pose_pred_cov = (G_t @ pos_cov @ G_t.T) + \
+                    (rotation_matrix_z @ control_cov @ rotation_matrix_z.T)
+
+    # update just the new predicted covariance in robot pose, measurement pose is left untouched
+    P_pred[0:3,0:3] = pose_pred_cov
 
     return X_pred, P_pred
 
@@ -186,22 +225,101 @@ def update(X_pre, P_pre, measure, measure_cov, k):
 
     \return X Updated X state of shape (3 + 2k, 1).
     \return P Updated P covariance of shape (3 + 2k, 3 + 2k).
-    '''
 
-    return X_pre, P_pre
+    Since we have a measurement, we will have to update both pose and measure covariances, i.e.
+    the entire P_pre will be updated.
+
+    Here we use the H_p and H_l described in the theory section. H_l and H_p will be combined
+    to form H_t (the term in the EKF Algorithm in Probablistic Robotics). This H_t term
+    will be defined for each landmark and stored in a massive matrix
+
+    Q viz measurement covariance will need to be added to the H_t of each landmark, therefore
+    it too will also be stored in a huge diagonal matrix
+    '''
+    # Q needs to be added to (Ht @ P_pre @ (Ht.T)) = (2*k, 2*k), therefore must be same shape
+    Q = np.zeros(shape=(2*k, 2*k))
+
+    # stack all predicted measurements into one large vector
+    z_t = np.zeros(shape=(2*k, 1))
+
+    # H_t as discussed above will be a large diagonal matrix where we'll stack H_p and H_l
+    # side-by-side horizontally (making H_t 2x5 for each landmark). This will then be stacked
+    # vertically, but again as a diagonal matrix.
+    # H_t.T will also be multiplied with P_pre (3+2k, 3+2k). Therefore this needs to
+    # also have 3+2k columns therefore the other column should be 2k rows since
+    # (H_p concat with H_l) = 2x5
+    H_t = np.zeros(shape=(2*k, 3+(2*k)))
+
+    # iterate through every measurement, assuming every measurement captures every landmark
+    num_measurements = k
+    for i in range(num_measurements):
+        # since we have a predicted pose already X_pre[0:3] we'll use that as our
+        # linearization point
+
+        # define the predicted pose of robot and landmark in global frame
+        pos_x = X_pre[0][0] # robot pose_x in global frame
+        pos_y = X_pre[1][0] # robot pose_y in global frame
+        pos_theta = X_pre[2][0] #  bearing in global frame
+        l_x = X_pre[3+i*2][0] # landmark i in global frame
+        l_y = X_pre[4+i*2][0] # landmark i in global frame
+
+        # convert predicted poses to local frame
+        l_x_offset = l_x - pos_x
+        l_y_offset = l_y - pos_y
+
+        # use predicted pose of robot and landmark to get predicted measurements
+        i_bearing = warp2pi(np.arctan2(l_y_offset, l_x_offset) - pos_theta) # bearing of i-th l
+        i_range = math.sqrt(l_x_offset**2 + l_y_offset**2) # range of i-th landmark
+        z_t[2*i][0] = i_bearing
+        z_t[2*i+1][0] = i_range
+
+        # Jacobian of measurement function (h(β,r) in theory) w.r.t pose (x,y,theta)
+        # Note here we define h(β,r), whereas in theory it is h(r,β), hence rows are interchanged
+        H_p = np.array([[(l_y_offset/(i_range**2)), (-l_x_offset/(i_range**2)), -1],
+                        [(-l_x_offset/i_range)    , (-l_y_offset/i_range),       0],],
+                        dtype=np.float64)
+
+        # Note here we define h(β,r), whereas in theory it is h(r,β)
+        H_l = np.array([[(-l_y_offset/(i_range**2)), (l_x_offset/(i_range**2))],
+                        [(l_x_offset/i_range)      , (l_y_offset/i_range)     ]])
+
+        # H_t[2*i : 2*i+2, 2*i : 2*i+3] = H_p
+        H_t[2*i : 2*i+2, 0:3] = H_p
+        H_t[2*i : 2*i+2, 3+2*i : 5+2*i] = H_l
+
+        Q[i*2:i*2+2, i*2:i*2+2] = measure_cov
+
+    # Now after obtaining H_t and Q_t, find Kalman gain K
+    K = P_pre @ H_t.T @ np.linalg.inv((H_t @ P_pre @ H_t.T) + Q)
+
+    # Update pose(mean) and noise(covariance) using K #! SHOULD I SUM THE DIFFERENCES IN MEAS?
+    X_updated = np.zeros(shape=X_pre.shape)
+    X_updated = X_pre + K @ (measure - z_t) # (measure - z_t) = (actual - prediction)
+
+    P_updated = (np.eye(2*k+3) - (K @ H_t)) @ P_pre
+
+    return X_updated, P_updated
 
 
 def evaluate(X, P, k):
     '''
     TODO: evaluate the performance of EKF SLAM.
     1) Plot the results.
-    2) Compute and print the Euclidean and Mahalanobis distance given X, P, and the ground truth (provided in the function).
+    2) Compute and print the Euclidean and Mahalanobis distance
+       given X, P, and the ground truth (provided in the function).
     \param X State vector of shape (3 + 2k, 1) stacking pose and landmarks.
     \param P Covariance matrix of shape (3 + 2k, 3 + 2k) for X.
 
     \return None
     '''
     l_true = np.array([3, 6, 3, 12, 7, 8, 7, 14, 11, 6, 11, 12], dtype=float)
+
+    e_dist = np.zeros(shape=l_true.shape, dtype=float)
+    m_dist = np.zeros(shape=l_true.shape, dtype=float)
+
+    for i in range(k):
+        euclidean_dist = 0
+
     plt.scatter(l_true[0::2], l_true[1::2])
     plt.draw()
     plt.waitforbuttonpress(0)
@@ -231,7 +349,7 @@ def main():
     The data file is extracted as arr and is given to init_landmarks below
 
     The data file has 2 types of entries:
-    1. landmarks [β 1 r 1 β 2 r 2 · · · ], where β_i , r_i correspond to landmark
+    1. landmarks [β_1 r_1 β_2 r_2 · · · ], where β_i , r_i correspond to landmark
     2. control inputs in form of [d, alpha] (d = translation along x-axis)
     """
     arr = np.array([float(field) for field in fields])
@@ -247,8 +365,6 @@ def main():
     pose = np.zeros((3, 1))
     pose_cov = np.diag([0.02**2, 0.02**2, 0.1**2])
 
-    ##########
-    # TODO: initialize landmarks
     """
     measure = all landmarks
     measure_cov = known sensor covariance
@@ -292,8 +408,6 @@ def main():
             d, alpha = arr[0], arr[1]
             control = np.array([[d], [alpha]])
 
-            ##########
-            # TODO: predict step in EKF SLAM
             X_pre, P_pre = predict(X, P, control, control_cov, k)
 
             draw_traj_and_pred(X_pre, P_pre)
@@ -303,8 +417,6 @@ def main():
             print(f'{t}: Update step')
             measure = np.expand_dims(arr, axis=1)
 
-            ##########
-            # TODO: update step in EKF SLAM
             X, P = update(X_pre, P_pre, measure, measure_cov, k)
 
             draw_traj_and_map(X, last_X, P, t)
