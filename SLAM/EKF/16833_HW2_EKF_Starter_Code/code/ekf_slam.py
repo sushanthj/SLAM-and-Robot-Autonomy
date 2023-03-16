@@ -144,8 +144,8 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
 
         # Note, L here is the derivative of (l_x,l_y) vector (sensor model) w.r.t beta and theta
         # G_l is the derivative of same sensor model w.r.t state varialbes (x,y,theta)
-        L = np.array([[-l_range*float(np.sin(beta+theta_t)), float(np.cos(beta+theta_t))],
-                      [l_range*float(np.cos(beta+theta_t)), float(np.sin(beta+theta_t))]])
+        L = np.array([[float(np.cos(beta+theta_t)), -l_range*float(np.sin(beta+theta_t))],
+                      [float(np.sin(beta+theta_t)), l_range*float(np.cos(beta+theta_t))]])
 
         # G_l represents the robot pose aspect of landmark measurement
         # therefore when measuring covariance, it will use robot pose covariance
@@ -212,39 +212,6 @@ def predict(X, P, control, control_cov, k):
     P_pred[0:3,0:3] = pose_pred_cov
 
     return X_pred, P_pred
-
-def update_yash(X_pre, P_pre, measure, measure_cov, k):
-
-    z = np.zeros((2*k,1))
-    Ht = np.zeros((2*k, 3 + 2*k))
-    Q = np.zeros((2*k, 2*k))
-
-    for i in range(k):
-        dx = float(X_pre[3+2*i]-X_pre[0])
-        dy = float(X_pre[4+2*i]-X_pre[1])
-
-        z[2*i+1] = float(np.sqrt(dx**2 + dy**2))
-        z[2*i] = warp2pi(np.arctan2(dy,dx) - X_pre[2])
-
-        #! You've fucked up here, you reveresed the order
-        Hp = [[float(-dx/np.sqrt(dy**2+dx**2)), float(-dy/np.sqrt(dy**2+dx**2)), 0], 
-             [float(dy/(dy**2+dx**2)), float(-dx/(dy**2+dx**2)), -1]]
-        Hl = [[float(dx/np.sqrt(dy**2+dx**2)), float(dy/np.sqrt(dy**2+dx**2))],
-              [float(-dy/(dy**2+dx**2)), float(dx/(dy**2+dx**2))]]
-        #! You also need to include this 0:3 part
-        Ht[2*i:2*(i+1),0:3] = Hp
-        Ht[2*i:2*(i+1),3+2*i:5+2*i] = Hl
-        Q[i*2:i*2+2, i*2:i*2+2] = measure_cov
-
-    # instead of doing this line below, you can just do the line above
-    # Q = block_diag(measure_cov, measure_cov, measure_cov, measure_cov, measure_cov, measure_cov)
-    K = P_pre @ (Ht.T) @ np.linalg.inv((Ht @ P_pre @ (Ht.T)) + Q)
-
-    X_pre = X_pre + K @ (measure - z)
-    I = np.identity(3+2*k)
-    P_pre = (I - (K @ Ht)) @ P_pre
-
-    return X_pre, P_pre
 
 def update(X_pre, P_pre, measure, measure_cov, k):
     '''
@@ -315,7 +282,7 @@ def update(X_pre, P_pre, measure, measure_cov, k):
         H_l = np.array([[(-l_y_offset/(i_range**2)), (l_x_offset/(i_range**2))],
                         [(l_x_offset/i_range)      , (l_y_offset/i_range)     ]])
 
-        # H_t[2*i : 2*i+2, 2*i : 2*i+3] = H_p
+        # See theory how H_t is constructed. H_p goes only along the first three columns
         H_t[2*i : 2*i+2, 0:3] = H_p
         H_t[2*i : 2*i+2, 3+2*i : 5+2*i] = H_l
 
@@ -326,7 +293,7 @@ def update(X_pre, P_pre, measure, measure_cov, k):
 
     # Update pose(mean) and noise(covariance) using K #! SHOULD I SUM THE DIFFERENCES IN MEAS?
     X_updated = np.zeros(shape=X_pre.shape)
-    X_updated = X_pre + K @ (measure - z_t) # (measure - z_t) = (actual - prediction)
+    X_updated = X_pre + (K @ (measure - z_t)) # (measure - z_t) = (actual - prediction)
 
     P_updated = (np.eye(2*k+3) - (K @ H_t)) @ P_pre
 
