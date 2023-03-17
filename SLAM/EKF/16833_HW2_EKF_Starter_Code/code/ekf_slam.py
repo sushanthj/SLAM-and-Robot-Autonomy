@@ -245,8 +245,8 @@ def update(X_pre, P_pre, measure, measure_cov, k):
     # side-by-side horizontally (making H_t 2x5 for each landmark). This will then be stacked
     # vertically, but again as a diagonal matrix.
     # H_t.T will also be multiplied with P_pre (3+2k, 3+2k). Therefore this needs to
-    # also have 3+2k columns therefore the other column should be 2k rows since
-    # (H_p concat with H_l) = 2x5
+    # also have 3+2k columns therefore the other dimensions should be 2k rows since
+    # (H_p concat with H_l) = 2x5. Therefore, final H_t shape = 2k,3+2k
     H_t = np.zeros(shape=(2*k, 3+(2*k)))
 
     # iterate through every measurement, assuming every measurement captures every landmark
@@ -278,7 +278,7 @@ def update(X_pre, P_pre, measure, measure_cov, k):
                         [(-l_x_offset/i_range)    , (-l_y_offset/i_range),       0],],
                         dtype=np.float64)
 
-        # Note here we define h(β,r), whereas in theory it is h(r,β)
+        # Note here we define h(β,r)
         H_l = np.array([[(-l_y_offset/(i_range**2)), (l_x_offset/(i_range**2))],
                         [(l_x_offset/i_range)      , (l_y_offset/i_range)     ]])
 
@@ -289,6 +289,7 @@ def update(X_pre, P_pre, measure, measure_cov, k):
         Q[i*2:i*2+2, i*2:i*2+2] = measure_cov
 
     # Now after obtaining H_t and Q_t, find Kalman gain K
+    # K = (3+2k, 3+2k) @ (3+2k, 2k) @ (2k, 2k) = (3+2k, 2k)
     K = P_pre @ H_t.T @ np.linalg.inv((H_t @ P_pre @ H_t.T) + Q)
 
     # Update pose(mean) and noise(covariance) using K #! SHOULD I SUM THE DIFFERENCES IN MEAS?
