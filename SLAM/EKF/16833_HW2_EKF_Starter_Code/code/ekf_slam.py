@@ -101,7 +101,8 @@ def warp2pi(angle_rad):
 
 def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
     '''
-    Here we find:
+    NOTE: Here we predict where the landmark may be, based on bearing and range sensor readings
+    
     1. Number of landmarks (k)
     2. landmark states (just position (2k,1)) which will get stacked onto
        robot pose
@@ -166,7 +167,8 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
 
 def predict(X, P, control, control_cov, k):
     '''
-    TODO: predict step in EKF SLAM with derived Jacobians.
+    NOTE: Here we predict only the robot's new state (new state's mean and covariance)
+
     \param X State vector of shape (3 + 2k, 1) stacking pose and landmarks.
     \param P Covariance matrix of shape (3 + 2k, 3 + 2k) for X.
     \param control Control signal of shape (2, 1) in the polar space that moves the robot.
@@ -186,6 +188,7 @@ def predict(X, P, control, control_cov, k):
     pos_cov = deepcopy(P[0:3,0:3])
 
     X_pred = np.zeros(shape=X.shape)
+    # update only robot pose (not landmark pose)
     X_pred[0][0] += d_t*np.cos(theta_curr)
     X_pred[1][0] += d_t*np.sin(theta_curr)
     X_pred[2][0] += alpha_t
@@ -215,7 +218,8 @@ def predict(X, P, control, control_cov, k):
 
 def update(X_pre, P_pre, measure, measure_cov, k):
     '''
-    TODO: update step in EKF SLAM with derived Jacobians.
+    NOTE: Using predicted landmark & robot pose, we emulate our sensor reading using the sensor model
+
     \param X_pre Predicted state vector of shape (3 + 2k, 1) from the predict step.
     \param P_pre Predicted covariance matrix of shape (3 + 2k, 3 + 2k) from the predict step.
     \param measure Measurement signal of shape (2k, 1).
