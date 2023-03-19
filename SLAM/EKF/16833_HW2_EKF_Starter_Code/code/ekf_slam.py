@@ -137,21 +137,21 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
         l_range = init_measure[l_i*2 + 1][0]
 
         # need to find landmark location in global coords (l_x, l_y) to find H_l
-        l_x = x_t + l_range*(float(np.cos(beta+theta_t)))
-        l_y = y_t + l_range*(float(np.sin(beta+theta_t)))
+        l_x = x_t + (float(l_range * np.cos(beta+theta_t)))
+        l_y = y_t + (float(l_range * np.sin(beta+theta_t)))
 
         landmark[l_i*2][0] = l_x
         landmark[l_i*2+1][0] = l_y
 
         # Note, L here is the derivative of (l_x,l_y) vector (sensor model) w.r.t beta and theta
         # G_l is the derivative of same sensor model w.r.t state varialbes (x,y,theta)
-        L = np.array([[float(np.cos(beta+theta_t)), -l_range*float(np.sin(beta+theta_t))],
-                      [float(np.sin(beta+theta_t)), l_range*float(np.cos(beta+theta_t))]])
+        L = np.array([[float(-l_range* np.sin(beta+theta_t)), float(np.cos(beta+theta_t))],
+                      [float(l_range* np.cos(beta+theta_t)), float(np.sin(beta+theta_t))]])
 
         # G_l represents the robot pose aspect of landmark measurement
         # therefore when measuring covariance, it will use robot pose covariance
-        G_l = np.array([[1, 0, -l_range*float(np.sin(theta_t + beta))],
-                        [0, 1, l_range*float(np.cos(theta_t + beta))]])
+        G_l = np.array([[1, 0, float(-l_range * np.sin(theta_t + beta))],
+                        [0, 1, float(l_range * np.cos(theta_t + beta))]])
 
         # See theory, L below was derived w.r.t to measurement. Therefore,
         # during covariance calculation it will use measurement_covariance
@@ -189,9 +189,9 @@ def predict(X, P, control, control_cov, k):
 
     X_pred = np.zeros(shape=X.shape)
     # update only robot pose (not landmark pose)
-    X_pred[0][0] += d_t*np.cos(theta_curr)
-    X_pred[1][0] += d_t*np.sin(theta_curr)
-    X_pred[2][0] += alpha_t
+    X_pred[0][0] += float(d_t*np.cos(theta_curr))
+    X_pred[1][0] += float(d_t*np.sin(theta_curr))
+    X_pred[2][0] += float(alpha_t)
 
     X_pred = X_pred + X
 
@@ -200,8 +200,8 @@ def predict(X, P, control, control_cov, k):
     # pose and measurement cov. IN THIS STEP OF PREDICTION WE ONLY UPDATE POSE COV
     # Therefore G_t and R_t can be 3x3 (3 variables in state vector)
 
-    G_t = np.array([[1, 0,  -d_t*float(np.sin(theta_curr))],
-                    [0, 1,   d_t*float(np.cos(theta_curr))],
+    G_t = np.array([[1, 0, float(-d_t * np.sin(theta_curr))],
+                    [0, 1, float(d_t * np.cos(theta_curr))],
                     [0, 0,                1               ]])
 
     rotation_matrix_z = np.array([[float(np.cos(theta_curr)), -float(np.sin(theta_curr)), 0],
@@ -278,13 +278,13 @@ def update(X_pre, P_pre, measure, measure_cov, k):
 
         # Jacobian of measurement function (h(β,r) in theory) w.r.t pose (x,y,theta)
         # Note here we define h(β,r), whereas in theory it is h(r,β), hence rows are interchanged
-        H_p = np.array([[(l_y_offset/(i_range**2)), (-l_x_offset/(i_range**2)), -1],
-                        [(-l_x_offset/i_range)    , (-l_y_offset/i_range),       0],],
+        H_p = np.array([[(-l_x_offset/i_range)    , (-l_y_offset/i_range),       0],
+                        [(l_y_offset/(i_range**2)), (-l_x_offset/(i_range**2)), -1],],
                         dtype=np.float64)
 
         # Note here we define h(β,r)
-        H_l = np.array([[(-l_y_offset/(i_range**2)), (l_x_offset/(i_range**2))],
-                        [(l_x_offset/i_range)      , (l_y_offset/i_range)     ]])
+        H_l = np.array([[(l_x_offset/i_range)      , (l_y_offset/i_range)     ],
+                        [(-l_y_offset/(i_range**2)), (l_x_offset/(i_range**2))]])
 
         # See theory how H_t is constructed. H_p goes only along the first three columns
         H_t[2*i : 2*i+2, 0:3] = H_p
@@ -296,7 +296,7 @@ def update(X_pre, P_pre, measure, measure_cov, k):
     # K = (3+2k, 3+2k) @ (3+2k, 2k) @ (2k, 2k) = (3+2k, 2k)
     K = P_pre @ H_t.T @ np.linalg.inv((H_t @ P_pre @ H_t.T) + Q)
 
-    # Update pose(mean) and noise(covariance) using K #! SHOULD I SUM THE DIFFERENCES IN MEAS?
+    # Update pose(mean) and noise(covariance) using K
     X_updated = np.zeros(shape=X_pre.shape)
     X_updated = X_pre + (K @ (measure - z_t)) # (measure - z_t) = (actual - prediction)
 
