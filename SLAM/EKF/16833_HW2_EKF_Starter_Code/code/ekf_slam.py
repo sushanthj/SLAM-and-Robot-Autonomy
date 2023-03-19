@@ -381,6 +381,7 @@ def main():
     # Setup control and measurement covariance
     control_cov = np.diag([sig_x2, sig_y2, sig_alpha2])
     measure_cov = np.diag([sig_beta2, sig_r2])
+    # measure_cov = np.diag([sig_r2, sig_beta2])
 
     # Setup the initial pose vector and pose uncertainty
     # pose vector is initialized to zero
