@@ -416,6 +416,7 @@ def main():
     """
     P = np.block([[pose_cov, np.zeros((3, 2 * k))],
                   [np.zeros((2 * k, 3)), landmark_cov]])
+    print("Init covariance \n", np.round(P,2))
 
     # Plot initial state and covariance
     last_X = X
@@ -448,7 +449,8 @@ def main():
             t += 1
 
     # EVAL: Plot ground truth landmarks and analyze distances
-    print("K is", k)
+    print("K is \n", k)
+    print("Final covariance \n", np.round(P,2))
     evaluate(X, P, k)
 
 
