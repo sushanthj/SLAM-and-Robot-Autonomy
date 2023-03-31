@@ -5,6 +5,7 @@
 
 from scipy.sparse import csc_matrix, eye
 from scipy.sparse.linalg import inv, splu, spsolve, spsolve_triangular
+import sparseqr
 from sparseqr import rz, permutation_vector_to_matrix, solve as qrsolve
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,15 +21,23 @@ def solve_pinv(A, b):
     # TODO: return x s.t. Ax = b using pseudo inverse.
     N = A.shape[1]
     x = np.zeros((N, ))
+    # Ax = b  <======> inv(A.T @ A) @ A.T @ A @ x = A.T b
+    x = inv(A.T @ A) @ (A.T @ b)
     return x, None
 
 
 def solve_lu(A, b):
     # TODO: return x, U s.t. Ax = b, and A = LU with LU decomposition.
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.splu.html
+    # Better ref: https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.SuperLU.html
     N = A.shape[1]
     x = np.zeros((N, ))
+
+    lu = splu(A.T @ A, permc_spec='NATURAL')
+    x = lu.solve(A.T @ b)
+
     U = eye(N)
+    U = lu.U.A
     return x, U
 
 
@@ -37,7 +46,12 @@ def solve_lu_colamd(A, b):
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.splu.html
     N = A.shape[1]
     x = np.zeros((N, ))
+
+    lu = splu(A.T @ A, permc_spec='COLAMD')
+    x = lu.solve(A.T @ b)
+
     U = eye(N)
+    U = lu.U.A
     return x, U
 
 
@@ -47,6 +61,10 @@ def solve_qr(A, b):
     N = A.shape[1]
     x = np.zeros((N, ))
     R = eye(N)
+
+    Q, R, E, rank = sparseqr.qr(A)
+    
+
     return x, R
 
 

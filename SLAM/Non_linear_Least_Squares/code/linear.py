@@ -8,6 +8,7 @@ import numpy as np
 import scipy.linalg
 from scipy.sparse import csr_matrix
 import argparse
+import ipdb
 import matplotlib.pyplot as plt
 from solvers import *
 from utils import *
@@ -41,17 +42,60 @@ def create_linear_system(odoms, observations, sigma_odom, sigma_observation,
     sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(sigma_observation))
 
     # TODO: First fill in the prior to anchor the 1st pose at (0, 0)
+    # The prior is just a reference frame, it also has some uncertainty, but no measurement
+    # Hence the measurement function which estimates the prior is just a identity function
+    # i.e h_p(r_t) = r_t. Since no measurements exist, the b matrix will have only zeros (already the case)
+
+    # Here we also define the uncertainty in prior is same as odom uncertainty
+    A[0:2, 0:2] = sqrt_inv_odom @ np.eye(2)
+
+    # no need to update b (already zeros)
 
     # TODO: Then fill in odometry measurements
+    """
+    The A matrix structure is shown in the theory section. Along the rows, it has:
+        - predicted prior (of size 1)
+        - predicted odom measurements (of size n_odom)
+        - predicted landmark measurements (of size n_obs)
+
+    We will also follow the same order
+    """
+
+    H_odom = np.array([[-1,0,1,0], [0,-1,0,1]], dtype=np.float32)
+    H_land = np.array([[-1,0,1,0], [0,-1,0,1]], dtype=np.float32)
+
+    A_fill_odom = sqrt_inv_odom @ H_odom
+
+    for i in range(n_odom):
+        # declare an offset for i to include the prior term (which only occurs once along rows)
+        j = i+1
+
+        # A[2*j : 2*j+2 , 2*j : 2*j+4] = sqrt_inv_odom @ H_odom
+        A[2*j : 2*j+2, 2*i : 2*i+4] = A_fill_odom
+        b[2*j : 2*j + 2] = sqrt_inv_odom @ odoms[i]
 
     # TODO: Then fill in landmark measurements
+    A_fill_land = sqrt_inv_obs @ H_land # H_land like H_odom is also a 2x4 matrix
+
+    for i in range(n_obs):
+        # observations = (52566,4) # (pose_index, landmark_index, measurement_x, measurement_y)
+        # Therefore we need to check which pose is associated with which landmark
+        p_idx = int(observations[i,0])
+        l_idx = int(observations[i,1])
+        # offset to account for prior (offset only along rows) + all odom measurements above
+        j = i + n_odom + 1
+
+        A[2*j : 2*j+2, 2*p_idx : 2*p_idx+2] = A_fill_land[0:2, 0:2]
+        A[2*j : 2*j+2, 2*(n_poses + l_idx):2*(n_poses + l_idx)+2] = A_fill_land[0:2, 2:4]
+        b[2*j : 2*j+2] = sqrt_inv_obs @ observations[i,2:4]
 
     return csr_matrix(A), b
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('data', help='path to npz file')
+    parser.add_argument('--data', help='path to npz file', nargs='?',
+                        default='/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/Non_linear_Least_Squares/data/2d_linear.npz')
     parser.add_argument(
         '--method',
         nargs='+',
@@ -72,6 +116,11 @@ if __name__ == '__main__':
     # Plot gt trajectory and landmarks for a sanity check.
     gt_traj = data['gt_traj']
     gt_landmarks = data['gt_landmarks']
+
+    # Verify that gt_traj = (1000,2) and gt_landmarks = (100,2) shapes for 2d_linear.npz
+    print(gt_traj.shape)
+    print(gt_landmarks.shape)
+
     plt.plot(gt_traj[:, 0], gt_traj[:, 1], 'b-', label='gt trajectory')
     plt.scatter(gt_landmarks[:, 0],
                 gt_landmarks[:, 1],
@@ -88,6 +137,13 @@ if __name__ == '__main__':
     observations = data['observations']
     sigma_odom = data['sigma_odom']
     sigma_landmark = data['sigma_landmark']
+    """
+    The shapes of above values for 2d_linear.npz are:
+    odoms = (999,2) which makes sense since there are 1000 robot poses
+    observations = (52566,4) # (pose_index, landmark_index, measurement_x, measurement_y)
+    sigma_odom = (2,2)
+    sigma_landmark = (2,2)
+    """
 
     # Build a linear system
     A, b = create_linear_system(odoms, observations, sigma_odom,
