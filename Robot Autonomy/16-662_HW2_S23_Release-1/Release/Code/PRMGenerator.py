@@ -41,14 +41,29 @@ start = time.time()
 #TODO: Fill in the following function using prmVertices and prmEdges to store
 # the graph. The code at the end saves the graph into a python pickle file.
 
+
 def PRMGenerator():
 
 	while len(prmVertices)<1000:
 		# sample random poses
 		print(len(prmVertices))
-		
 
+		q = mybot.SampleRobotConfig()
+		if not mybot.DetectCollision(q, pointsObs, axesObs):
+			prmVertices.append(q)
 
+			prmEdges.append([])
+
+			for j in range(len(prmVertices) - 1):
+
+				try:
+					if np.linalg.norm(np.array(prmVertices[-1]) - np.array(prmVertices[j])) < 2.0:
+						if not mybot.DetectCollisionEdge(prmVertices[-1], prmVertices[j], pointsObs, axesObs):
+							prmEdges[-1].append(j)
+							prmEdges[j].append(len(prmVertices)-1)
+				except:
+					import ipdb; ipdb.set_trace()
+					pass
 
 	#Save the PRM such that it can be run by PRMQuery.py
 	f = open("myPRM.p", 'wb')

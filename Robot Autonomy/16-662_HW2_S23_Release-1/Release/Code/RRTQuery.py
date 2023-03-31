@@ -180,9 +180,26 @@ def RRTQuery():
 				break
 
 		for i in range(150):
-			anchorA = np.random.randint(0, len(plan)-2)
-			anchorB = np.random.randint(anchorA+1, len(plan)-1)
-			
+			anchorA = np.random.randint(0, len(plan) - 2)
+			anchorB = np.random.randint(anchorA + 1, len(plan) - 1)
+
+			shiftA = np.random.uniform(0, 1)
+			shiftB = np.random.uniform(0, 1)
+
+			candidateA = (1 - shiftA) * np.array(plan[anchorA]) + shiftA * np.array(plan[anchorA + 1])
+			try:
+				candidateB = (1 - shiftB) * np.array(plan[anchorB]) + shiftB * np.array(plan[anchorB + 1])
+			except:
+				import ipdb
+				ipdb.set_trace()
+
+			if not mybot.DetectCollisionEdge(candidateA, candidateB, pointsObs, axesObs):
+				while anchorB > anchorA:
+					plan.pop(anchorB)
+					anchorB = anchorB - 1
+
+				plan.insert(anchorA + 1, candidateB)
+				plan.insert(anchorA + 1, candidateA)
 
 		for (i, q) in enumerate(plan):
 			print("Plan step: ", i, "and joint: ", q)
