@@ -62,8 +62,9 @@ def solve_qr(A, b):
     x = np.zeros((N, ))
     R = eye(N)
 
-    Q, R, E, rank = sparseqr.qr(A)
-    
+    # rz gives the upper triangular part
+    Z, R ,E, rank = rz(A, b, permc_spec='NATURAL')
+    x = spsolve_triangular(R,Z,lower=False)
 
     return x, R
 
@@ -74,6 +75,15 @@ def solve_qr_colamd(A, b):
     N = A.shape[1]
     x = np.zeros((N, ))
     R = eye(N)
+
+    # rz gives the upper triangular part
+    Z, R ,E, rank = rz(A, b, permc_spec='COLAMD')
+
+    # E is symmetric and is the permutation vector s.t. QR = AE
+    E = permutation_vector_to_matrix(E)
+    x = spsolve_triangular(R,Z,lower=False)
+    x = E @ x
+
     return x, R
 
 
