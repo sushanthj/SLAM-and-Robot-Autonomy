@@ -9,6 +9,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import spsolve
 import argparse
 import matplotlib.pyplot as plt
+import ipdb
 from solvers import *
 from utils import *
 
@@ -55,10 +56,12 @@ def odometry_estimation(x, i):
     '''
     \param x State vector containing both the pose and landmarks
     \param i Index of the pose to start from (odometry between pose i and i+1)
-    \return odom Odometry (\Delta x, \Delta) in the shape (2, )
+    \return odom Odometry (\Delta x, \Delta y) in the shape (2, )
     '''
     # TODO: return odometry estimation
     odom = np.zeros((2, ))
+
+    odom = x[2*i+1 : 2*i+3] - x[2*i : 2*i+2]
 
     return odom
 
@@ -74,6 +77,12 @@ def bearing_range_estimation(x, i, j, n_poses):
     # TODO: return bearing range estimations
     obs = np.zeros((2, ))
 
+    # given the robot pose and landmark location, get the bearing estimate (see theory)
+    y_dist = x[(2*n_poses)+(2*j)+1] - x[(2*i)+1]
+    x_dist = x[(2*n_poses)+(2*j)] - x[(2*i)]
+    obs[0] = warp2pi(np.arctan2(y_dist, x_dist))
+    obs[1] = np.sqrt(x_dist**2 + y_dist**2)
+
     return obs
 
 
@@ -87,6 +96,21 @@ def compute_meas_obs_jacobian(x, i, j, n_poses):
     '''
     # TODO: return jacobian matrix
     jacobian = np.zeros((2, 4))
+
+    y_dist = x[(2*n_poses)+(2*j)+1] - x[(2*i)+1]
+    x_dist = x[(2*n_poses)+(2*j)] - x[(2*i)]
+
+    sensor_range = np.sqrt(x_dist**2 + y_dist**2)
+
+    jacobian[0,0] = y_dist/(sensor_range**2)
+    jacobian[0,1] = -x_dist/(sensor_range**2)
+    jacobian[0,2] = -y_dist/(sensor_range**2)
+    jacobian[0,3] = x_dist/(sensor_range**2)
+
+    jacobian[1,0] = -x_dist/sensor_range
+    jacobian[1,1] = -y_dist/sensor_range
+    jacobian[1,2] = x_dist/sensor_range
+    jacobian[1,3] = y_dist/sensor_range
 
     return jacobian
 
@@ -119,17 +143,45 @@ def create_linear_system(x, odoms, observations, sigma_odom, sigma_observation,
     sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(sigma_observation))
 
     # TODO: First fill in the prior to anchor the 1st pose at (0, 0)
+    # The prior is just a reference frame, it also has some uncertainty, but no measurement
+    # Hence the measurement function which estimates the prior is just a identity function
+    # i.e h_p(r_t) = r_t. Since no measurements exist, the b matrix will have only zeros (already the case)
+
+    # Here we also define the uncertainty in prior is same as odom uncertainty
+    A[0:2, 0:2] = sqrt_inv_odom @ np.eye(2)
+
+    # no need to update b (already zeros)
+
+    H_odom = np.array([[-1,0,1,0], [0,-1,0,1]], dtype=np.float32)
+    A_fill_odom = sqrt_inv_odom @ H_odom
 
     # TODO: Then fill in odometry measurements
+    for i in range(n_odom):
+        # declare an offset for i to include the prior term (which only occurs once along rows)
+        j = i+1
+
+        A[2*j : 2*j+2, 2*i : 2*i+4] = A_fill_odom
+        b[2*j : 2*j + 2] = sqrt_inv_odom @ (odom[i] - odometry_estimation(x,i))
 
     # TODO: Then fill in landmark measurements
+    for i in range(n_obs):
+        p_idx = int(observations[i,0])
+        l_idx = int(observations[i,1])
+        Al = sqrt_inv_obs @ compute_meas_obs_jacobian(x, p_idx, l_idx, n_poses)
+
+        # offset again to account for prior
+        j = n_odom+1+i
+        A[2*j:2*j+2, 2*p_idx:2*p_idx+2] = Al[0:2,0:2]
+        A[2*j:2*j+2,2*(n_poses+l_idx):2*(n_poses+l_idx)+2] = Al[0:2,2:4]
+
+        b[2*j:2*j+2] = sqrt_inv_obs @ warp2pi(observations[i,2:4] - bearing_range_estimation(x,p_idx,l_idx,n_poses))
 
     return csr_matrix(A), b
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('data', default='../data/2d_nonlinear.npz')
+    parser.add_argument('data', nargs='?', default='../data/2d_nonlinear.npz')
     parser.add_argument(
         '--method',
         nargs='+',
