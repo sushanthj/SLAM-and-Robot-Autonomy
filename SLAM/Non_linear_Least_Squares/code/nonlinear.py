@@ -61,9 +61,11 @@ def odometry_estimation(x, i):
     # TODO: return odometry estimation
     odom = np.zeros((2, ))
 
-    odom[0] = x[2*(i+1)] - x[2*i]
-    odom[1] = x[2*(i+1)+1] - x[(2*i)+1]
-    # ipdb.set_trace()
+    try:
+        odom[0] = x[2*(i+1)] - x[2*i]
+        odom[1] = x[2*(i+1)+1] - x[(2*i)+1]
+    except:
+        ipdb.set_trace()
 
     return odom
 
