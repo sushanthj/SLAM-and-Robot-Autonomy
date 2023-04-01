@@ -1,6 +1,6 @@
 '''
-    Initially written by Ming Hsiao in MATLAB
-    Rewritten in Python by Wei Dong (weidong@andrew.cmu.edu), 2021
+Initially written by Ming Hsiao in MATLAB
+Rewritten in Python by Wei Dong (weidong@andrew.cmu.edu), 2021
 '''
 
 import numpy as np
@@ -31,7 +31,7 @@ def init_states(odoms, observations, n_poses, n_landmarks):
     '''
     traj = np.zeros((n_poses, 2))
     landmarks = np.zeros((n_landmarks, 2))
-    landmarks_mask = np.zeros((n_landmarks), dtype=np.bool)
+    landmarks_mask = np.zeros((n_landmarks), dtype=bool)
 
     for i in range(len(odoms)):
         traj[i + 1, :] = traj[i, :] + odoms[i, :]
@@ -61,7 +61,9 @@ def odometry_estimation(x, i):
     # TODO: return odometry estimation
     odom = np.zeros((2, ))
 
-    odom = x[2*i+1 : 2*i+3] - x[2*i : 2*i+2]
+    odom[0] = x[2*(i+1)] - x[2*i]
+    odom[1] = x[2*(i+1)+1] - x[(2*i)+1]
+    # ipdb.set_trace()
 
     return odom
 
