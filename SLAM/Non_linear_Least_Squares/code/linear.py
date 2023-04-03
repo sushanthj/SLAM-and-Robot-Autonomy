@@ -95,7 +95,7 @@ def create_linear_system(odoms, observations, sigma_odom, sigma_observation,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', help='path to npz file', nargs='?',
-                        default='/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/Non_linear_Least_Squares/data/2d_linear.npz')
+                        default='/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/Non_linear_Least_Squares/data/2d_linear_loop.npz')
     parser.add_argument(
         '--method',
         nargs='+',
