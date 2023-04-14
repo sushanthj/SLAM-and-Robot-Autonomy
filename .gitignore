@@ -131,3 +131,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/SLAM/ICP_fusion/living_room_traj2_frei_png
