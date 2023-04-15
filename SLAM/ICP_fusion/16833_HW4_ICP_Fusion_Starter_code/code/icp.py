@@ -49,23 +49,45 @@ def find_projective_correspondence(source_points,
     target_us, target_vs, target_ds = transforms.project(
         T_source_points, intrinsic)
     # us and vs (basically just u,v) is just the pixel position in image (called target space)
-    target_us = np.round(target_us).astype(int)
-    target_vs = np.round(target_vs).astype(int)
+    target_us = np.round(target_us).astype(int) # should be within target width
+    target_vs = np.round(target_vs).astype(int) # should be within target height
 
-    # TODO: first filter: valid projection (valid if the u,v is in the  space)
+    # TODO: first filter: valid projection (valid if the u,v = x,y = width,height is in the space)
     mask = np.zeros_like(target_us).astype(bool)
-    ipdb.set_trace()
+
+    # 1st check  np.where(target_us < 200)[0].shape => gives no. of valid correspondences
+    # similarly, we do a series of checks
+    mask1 = np.where(target_us < w)
+    mask2 = np.where(target_vs < h)
+    mask3 = np.where(target_ds > 0)
+    mask = np.logical_and(np.logical_and(mask1, mask2), mask3)
+    mask = np.squeeze(mask, axis=0)
+
+    # just to verify we didn't mess up the shapes
+    assert mask.shape == target_us.shape
     # End of TODO
 
+    # Use the above mask to get new source points
     source_indices = source_indices[mask]
     target_us = target_us[mask]
     target_vs = target_vs[mask]
     T_source_points = T_source_points[mask]
 
     # TODO: second filter: apply distance threshold
+    # To apply distance threshold, we'll need to project target_2D_pts onto 3D space
+    # we'll make use of the vertex map to do this
     mask = np.zeros_like(target_us).astype(bool)
+
+    # from code args above, target vertex takes h, w, 3
+    # remember u,v = x,y = width,height
+    target_pts = target_vertex_map[target_vs, target_us] # of shape (307200,3)
+    euclidean_dists = np.linalg.norm(target_pts - T_source_points, axis=1)
+    mask = np.where(euclidean_dists < dist_diff)
+
     # End of TODO
 
+    # Use the second mask again to further refine source points and get only
+    # those necessary target points
     source_indices = source_indices[mask]
     target_us = target_us[mask]
     target_vs = target_vs[mask]
@@ -88,6 +110,7 @@ def build_linear_system(source_points, target_points, target_normals, T):
     b = np.zeros((M, ))
 
     # TODO: build the linear system
+    
     # End of TODO
 
     return A, b
