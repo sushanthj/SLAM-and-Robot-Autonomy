@@ -12,6 +12,7 @@ import ipdb
 import argparse
 import transforms
 import o3d_utility
+import scipy
 
 from scipy.sparse.linalg import spsolve_triangular
 from sparseqr import rz
@@ -127,7 +128,7 @@ def build_linear_system(source_points, target_points, target_normals, T):
     for i in range(M):
         p_prime_skew = get_skew_symm_matrix(p_prime[i,:])
         A[i,0:3] = -(p_prime_skew @ n_q[i,:])
-        A[i,3:6] = n_q[i,:]
+        A[i,3:6] = -n_q[i,:]
 
         b[i] =  np.expand_dims(n_q[i,:],axis=0) @ np.expand_dims((p_prime[i,:] - q[i,:]), axis=1)
     # End of TODO
@@ -184,30 +185,19 @@ def solve(A, b):
     \param b (6, 1) vector in the LU formulation, or (N, 1) in the QR formulation
     \return delta (6, ) vector by solving the linear system. You may directly use dense solvers from numpy.
     '''
-    # TODO: write your relevant solver
-    ## Psuedo-inverse
-    # return np.linalg.inv(A.T @ A) @ -A.T @ b
+    # TODO: write your relavant solver
+    # Using the QR solver from the previous assignment
+    N = A.shape[1]
+    x = np.zeros((N, ))
+    R = np.eye(N)
 
-    # QR factorization
-    Q, R = np.linalg.qr(A)
-    d = np.dot(Q.T, b)
-    return np.dot(np.linalg.inv(R), d)
+    # convert A to a sparse matrix in COO format
+    A_coo = scipy.sparse.coo_matrix(A)
 
-# def solve(A, b):
-#     '''
-#     \param A (6, 6) matrix in the LU formulation, or (N, 6) in the QR formulation
-#     \param b (6, 1) vector in the LU formulation, or (N, 1) in the QR formulation
-#     \return delta (6, ) vector by solving the linear system. You may directly use dense solvers from numpy.
-#     '''
-#     # TODO: write your relevant solver
-#     N = A.shape[1]
-#     x = np.zeros((N, ))
-#     R = np.eye(N)
-
-#     # rz gives the upper triangular part
-#     Z, R ,_ ,_ = rz(A, b, permc_spec='NATURAL')
-#     x = spsolve_triangular(R,Z,lower=False)
-#     return x
+    # rz gives the upper triangular part
+    Z, R ,_ ,_ = rz(A_coo, b, permc_spec='NATURAL')
+    x = spsolve_triangular(R,Z,lower=False)
+    return x
 
 
 def icp(source_points,
@@ -230,7 +220,7 @@ def icp(source_points,
 
     T = T_init
 
-    for i in range(50):
+    for i in range(5):
         # TODO: fill in find_projective_correspondences
         source_indices, target_us, target_vs = find_projective_correspondence(
             source_points, source_normals, target_vertex_map,
@@ -250,6 +240,9 @@ def icp(source_points,
         A, b = build_linear_system(corres_source_points, corres_target_points,
                                    corres_target_normals, T)
         delta = solve(A, b)
+
+        if delta.shape == (6,1):
+            delta = np.squeeze(delta, axis=1)
 
         # Update and output
         T = pose2transformation(delta) @ T
