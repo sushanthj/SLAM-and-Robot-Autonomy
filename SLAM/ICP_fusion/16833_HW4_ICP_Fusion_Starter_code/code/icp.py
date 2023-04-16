@@ -13,6 +13,8 @@ import argparse
 import transforms
 import o3d_utility
 
+from scipy.sparse.linalg import spsolve_triangular
+from sparseqr import rz
 
 def find_projective_correspondence(source_points,
                                    source_normals,
@@ -57,11 +59,11 @@ def find_projective_correspondence(source_points,
 
     # 1st check  np.where(target_us < 200)[0].shape => gives no. of valid correspondences
     # similarly, we do a series of checks
-    mask1 = np.where(target_us < w)
-    mask2 = np.where(target_vs < h)
-    mask3 = np.where(target_ds > 0)
+    mask1 = np.where(target_us < w, True, False)
+    mask2 = np.where(target_vs < h, True, False)
+    mask3 = np.where(target_ds > 0, True, False)
     mask = np.logical_and(np.logical_and(mask1, mask2), mask3)
-    mask = np.squeeze(mask, axis=0)
+    # mask = np.squeeze(mask, axis=0)
 
     # just to verify we didn't mess up the shapes
     assert mask.shape == target_us.shape
@@ -82,8 +84,7 @@ def find_projective_correspondence(source_points,
     # remember u,v = x,y = width,height
     target_pts = target_vertex_map[target_vs, target_us] # of shape (307200,3)
     euclidean_dists = np.linalg.norm(target_pts - T_source_points, axis=1)
-    mask = np.where(euclidean_dists < dist_diff)
-
+    mask = np.where(euclidean_dists < dist_diff, True, False)
     # End of TODO
 
     # Use the second mask again to further refine source points and get only
@@ -110,11 +111,37 @@ def build_linear_system(source_points, target_points, target_normals, T):
     b = np.zeros((M, ))
 
     # TODO: build the linear system
-    
+    """
+    Our linear system is basically Ax - b = 0
+
+    - See theory for definition of A
+    - x = [alpha, beta, gamma, delta_t1, delta_t2, delta_t3].T
+    - b = scalar (1,1) (see theory)
+
+    Now, A is a (M x 6) matrix if we're defining it using QR. M = number of corresp. points.
+    The first three columns of A is easily defined in terms of a cross product (see notes):
+
+    A[0:3] = - np.cross(p_prime_skew, n_q) = -p_prime_skew @ n_q
+    A[3:6] = n_q
+    """
+    for i in range(M):
+        p_prime_skew = get_skew_symm_matrix(p_prime[i,:])
+        A[i,0:3] = -(p_prime_skew @ n_q[i,:])
+        A[i,3:6] = n_q[i,:]
+
+        b[i] =  np.expand_dims(n_q[i,:],axis=0) @ np.expand_dims((p_prime[i,:] - q[i,:]), axis=1)
     # End of TODO
 
     return A, b
 
+
+def get_skew_symm_matrix(input_matrix):
+    assert input_matrix.shape == (3,)
+    skew_symm_mat = np.array([[0, -input_matrix[2], input_matrix[1]],
+                              [input_matrix[2], 0, -input_matrix[0]],
+                              [-input_matrix[1], input_matrix[0], 0]])
+
+    return skew_symm_mat
 
 def pose2transformation(delta):
     '''
@@ -158,7 +185,29 @@ def solve(A, b):
     \return delta (6, ) vector by solving the linear system. You may directly use dense solvers from numpy.
     '''
     # TODO: write your relevant solver
-    return np.zeros((6, ))
+    ## Psuedo-inverse
+    # return np.linalg.inv(A.T @ A) @ -A.T @ b
+
+    # QR factorization
+    Q, R = np.linalg.qr(A)
+    d = np.dot(Q.T, b)
+    return np.dot(np.linalg.inv(R), d)
+
+# def solve(A, b):
+#     '''
+#     \param A (6, 6) matrix in the LU formulation, or (N, 6) in the QR formulation
+#     \param b (6, 1) vector in the LU formulation, or (N, 1) in the QR formulation
+#     \return delta (6, ) vector by solving the linear system. You may directly use dense solvers from numpy.
+#     '''
+#     # TODO: write your relevant solver
+#     N = A.shape[1]
+#     x = np.zeros((N, ))
+#     R = np.eye(N)
+
+#     # rz gives the upper triangular part
+#     Z, R ,_ ,_ = rz(A, b, permc_spec='NATURAL')
+#     x = spsolve_triangular(R,Z,lower=False)
+#     return x
 
 
 def icp(source_points,
@@ -181,7 +230,7 @@ def icp(source_points,
 
     T = T_init
 
-    for i in range(10):
+    for i in range(50):
         # TODO: fill in find_projective_correspondences
         source_indices, target_us, target_vs = find_projective_correspondence(
             source_points, source_normals, target_vertex_map,
