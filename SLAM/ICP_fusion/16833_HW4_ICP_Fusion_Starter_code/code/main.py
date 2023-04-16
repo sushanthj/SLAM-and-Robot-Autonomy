@@ -21,7 +21,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        'path', help='path to the dataset folder containing rgb/ and depth/')
+        '--path', help='path to the dataset folder containing rgb/ and depth/', nargs='?',
+        default="/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/ICP_fusion/living_room_traj2_frei_png")
     parser.add_argument('--start_idx',
                         type=int,
                         help='index to the source depth/normal maps',
@@ -75,6 +76,7 @@ if __name__ == '__main__':
         if i > 1:
             print('Frame-to-model icp')
             T_world_to_cam = np.linalg.inv(T_cam_to_world)
+            # T_world_to_cam is the transformation which maps world_frame coords to cam_frame
             T_world_to_cam = icp(m.points[::down_factor],
                                  m.normals[::down_factor],
                                  vertex_map,

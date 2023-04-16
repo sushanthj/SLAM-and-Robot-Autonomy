@@ -60,11 +60,14 @@ def find_projective_correspondence(source_points,
 
     # 1st check  np.where(target_us < 200)[0].shape => gives no. of valid correspondences
     # similarly, we do a series of checks
+    # NOTE. Method 1 of masking 
     mask1 = np.where(target_us < w, True, False)
     mask2 = np.where(target_vs < h, True, False)
-    mask3 = np.where(target_ds > 0, True, False)
+
+    # NOTE. Method 2 of masking
+    mask3 = np.zeros_like(target_us).astype(bool)
+    mask3 = (target_us > 0) & (target_vs > 0) & (target_ds > 0)
     mask = np.logical_and(np.logical_and(mask1, mask2), mask3)
-    # mask = np.squeeze(mask, axis=0)
 
     # just to verify we didn't mess up the shapes
     assert mask.shape == target_us.shape
