@@ -31,7 +31,9 @@ def project(points, intrinsic):
     cx = intrinsic[0, 2]
     cy = intrinsic[1, 2]
 
+    # us basically uses formula x = fX/Z + intrinsic
     us = fx * points[:, 0] / points[:, 2] + cx
+    # us basically uses formula y = fY/Z + intrinsic
     vs = fy * points[:, 1] / points[:, 2] + cy
     ds = points[:, 2]
 
