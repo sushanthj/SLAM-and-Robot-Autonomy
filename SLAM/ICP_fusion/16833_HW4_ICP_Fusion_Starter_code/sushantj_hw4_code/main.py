@@ -21,7 +21,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        'path', help='path to the dataset folder containing rgb/ and depth/')
+        '--path', help='path to the dataset folder containing rgb/ and depth/', nargs='?',
+        default="/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/ICP_fusion/living_room_traj2_frei_png")
     parser.add_argument('--start_idx',
                         type=int,
                         help='index to the source depth/normal maps',
@@ -75,6 +76,17 @@ if __name__ == '__main__':
         if i > 1:
             print('Frame-to-model icp')
             T_world_to_cam = np.linalg.inv(T_cam_to_world)
+            # T_world_to_cam is the transformation which maps world_frame coords to cam_frame
+            """
+            In the ICP function the 1st and 2nd arguments = source points, source normals
+                                    3rd and 4th arguments = target vertex map, target normals
+
+            the m.points and m.normals below are RGB-D frame points and normals (viz our SOURCE)
+            the vertex_map and normal map are from dataset (viz TARGET here).
+
+            Note: looks like vertex_map is a function of depth_data + intrinsics
+                  looks like normal_map is purely obtained from the dataset
+            """
             T_world_to_cam = icp(m.points[::down_factor],
                                  m.normals[::down_factor],
                                  vertex_map,

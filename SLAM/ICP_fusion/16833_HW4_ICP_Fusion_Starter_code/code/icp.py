@@ -36,13 +36,14 @@ def find_projective_correspondence(source_points,
     \return target_us: associated u coordinate of points in the target map, (M, 1)
     \return target_vs: associated v coordinate of points in the target map, (M, 1)
     '''
+    #! QUESTION: Are we not using target_normal_map?
     h, w, _ = target_vertex_map.shape
 
     R = T_init[:3, :3]
     t = T_init[:3, 3:]
 
     # Transform source points from the source coordinate system to the target coordinate system
-    T_source_points = (R @ source_points.T + t).T
+    T_source_points = (R @ source_points.T + t).T # T_source_pts = transformed_source_pts
 
     # Set up initial correspondences from source to target
     source_indices = np.arange(len(source_points)).astype(int)
@@ -60,7 +61,7 @@ def find_projective_correspondence(source_points,
 
     # 1st check  np.where(target_us < 200)[0].shape => gives no. of valid correspondences
     # similarly, we do a series of checks
-    # NOTE. Method 1 of masking 
+    # NOTE. Method 1 of masking
     mask1 = np.where(target_us < w, True, False)
     mask2 = np.where(target_vs < h, True, False)
 
@@ -223,7 +224,7 @@ def icp(source_points,
 
     T = T_init
 
-    for i in range(5):
+    for i in range(100):
         # TODO: fill in find_projective_correspondences
         source_indices, target_us, target_vs = find_projective_correspondence(
             source_points, source_normals, target_vertex_map,
@@ -269,7 +270,7 @@ if __name__ == '__main__':
     parser.add_argument('--target_idx',
                         type=int,
                         help='index to the source depth/normal maps',
-                        default=50)
+                        default=100)
     args = parser.parse_args()
 
     intrinsic_struct = o3d.io.read_pinhole_camera_intrinsic('intrinsics.json')

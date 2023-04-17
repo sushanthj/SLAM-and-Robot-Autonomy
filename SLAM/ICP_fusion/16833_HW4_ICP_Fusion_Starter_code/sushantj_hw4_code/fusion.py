@@ -8,12 +8,13 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 import quaternion  # pip install numpy-quaternion
+import ipdb
 
 import transforms
 import o3d_utility
 
 from preprocess import load_gt_poses
-
+from copy import copy
 
 class Map:
     def __init__(self):
@@ -35,7 +36,24 @@ class Map:
         \param t translation from camera (input) to world (map), (3, )
         \return None, update map properties IN PLACE
         '''
-        pass
+        # first we'll find the new point poses using the rotation and translation given
+        # we convert points to column vector to left mulitply with rotation matrix
+        new_pts = (R @ points.T + t).T
+        new_normals = (R @ normals.T).T
+
+        ex_points = copy(self.points[indices]) # previously existing points
+        ex_normals = copy(self.normals[indices]) # previously existing normals
+
+        # executed as a weighted average of existing points and new points
+        self.points[indices] = (self.weights[indices]*ex_points + new_pts) / (self.weights[indices] + 1)
+
+        # normals need to be averaged, but normalized again to get unit vectors as normals
+        self.normals[indices] = (self.weights[indices]*ex_normals + new_normals) / (self.weights[indices] + 1)
+        normals_mag = np.linalg.norm(self.normals[indices], axis=1, keepdims=True)
+        self.normals[indices] = self.normals[indices]/normals_mag
+
+        self.colors[indices] = (self.weights[indices] * self.colors[indices] + colors)/(self.weights[indices] + 1)
+        self.weights[indices] += 1
 
     def add(self, points, normals, colors, R, t):
         '''
@@ -48,7 +66,16 @@ class Map:
         \param t translation from camera (input) to world (map), (3, )
         \return None, update map properties by concatenation
         '''
-        pass
+        # first we'll find the new point poses using the rotation and translation given
+        # we convert points to column vector to left mulitply with rotation matrix
+        new_pts = (R @ points.T + t).T
+        new_normals = (R @ normals.T).T
+
+        # make the updates
+        self.points = np.vstack((self.points, new_pts))
+        self.normals = np.vstack((self.normals, new_normals))
+        self.weights = np.concatenate((self.weights, np.ones((len(points), 1))))
+        self.colors = np.concatenate((self.colors, colors))
 
     def filter_pass1(self, us, vs, ds, h, w):
         '''
@@ -61,7 +88,10 @@ class Map:
         \param w Width of the image projected to
         \return mask (N, 1) in bool indicating the valid coordinates
         '''
-        return np.zeros_like(us)
+        # NOTE: Refer the find_projective_correspondence in icp.py
+        mask = np.zeros_like(us).astype(bool)
+        mask = ((us >= 0) & (vs >= 0) & (ds >= 0) & (us < w) & (vs < h))
+        return mask
 
     def filter_pass2(self, points, normals, input_points, input_normals,
                      dist_diff, angle_diff):
@@ -73,10 +103,26 @@ class Map:
         \param input_points Input associated points, (M, 3)
         \param input_normals Input associated normals, (M, 3)
         \param dist_diff Distance difference threshold to filter correspondences by positions
-        \param angle_diff Angle difference threshold to filter correspondences by normals
+        \param angle_diff Angle difference threshold to filter correspondences by normals (rad)
         \return mask (N, 1) in bool indicating the valid correspondences
         '''
-        return np.zeros((len(points)))
+        # mask1 = np.zeros((len(points))).astype(bool) # checks for distance threshold
+        # mask2 = np.zeros((len(points))).astype(bool) # checks for normal threshold
+
+        euclidean_dists = np.linalg.norm(points - input_points, axis=1)
+        mask1 = np.where(euclidean_dists < dist_diff, True, False)
+
+        angluar_dists = np.sum((normals * input_normals), axis=1) # don't have to do np.dot (it also takes too
+        # much memory). Instead we multiply and sum (effecitvely dot prod)
+        magnitude_n = np.linalg.norm(normals, axis=1)
+        magnitude_inp_n = np.linalg.norm(input_normals, axis=1)
+        cos_theta = angluar_dists / (magnitude_n * magnitude_inp_n)
+        theta = np.abs(np.arccos(cos_theta))
+
+        mask2 = np.where(theta < angle_diff, True, False)
+
+        final_mask = np.logical_and(mask1, mask2)
+        return final_mask
 
     def fuse(self,
              vertex_map,
@@ -128,8 +174,8 @@ class Map:
             # TODO: first filter: valid projection
             mask = self.filter_pass1(us, vs, ds, h, w)
             # Should not happen -- placeholder before implementation
-            if mask.sum() == 0:
-                return
+            # if mask.sum() == 0:
+            #     return
             # End of TODO
 
             indices = indices[mask]
@@ -145,8 +191,8 @@ class Map:
             mask = self.filter_pass2(T_points, R_normals, valid_points,
                                      valid_normals, dist_diff, angle_diff)
             # Should not happen -- placeholder before implementation
-            if mask.sum() == 0:
-                return
+            # if mask.sum() == 0:
+            #     return
             # End of TODO
 
             indices = indices[mask]
@@ -183,7 +229,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        'path', help='path to the dataset folder containing rgb/ and depth/')
+        '--path', help='path to the dataset folder containing rgb/ and depth/', nargs='?',
+        default="/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/ICP_fusion/living_room_traj2_frei_png")
     parser.add_argument('--start_idx',
                         type=int,
                         help='index to the source depth/normal maps',

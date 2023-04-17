@@ -7,11 +7,15 @@ import os
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
+import ipdb
 
 import argparse
 import transforms
 import o3d_utility
+import scipy
 
+from scipy.sparse.linalg import spsolve_triangular
+from sparseqr import rz
 
 def find_projective_correspondence(source_points,
                                    source_normals,
@@ -32,34 +36,64 @@ def find_projective_correspondence(source_points,
     \return target_us: associated u coordinate of points in the target map, (M, 1)
     \return target_vs: associated v coordinate of points in the target map, (M, 1)
     '''
+    #! QUESTION: Are we not using target_normal_map?
     h, w, _ = target_vertex_map.shape
 
     R = T_init[:3, :3]
     t = T_init[:3, 3:]
 
     # Transform source points from the source coordinate system to the target coordinate system
-    T_source_points = (R @ source_points.T + t).T
+    T_source_points = (R @ source_points.T + t).T # T_source_pts = transformed_source_pts
 
     # Set up initial correspondences from source to target
     source_indices = np.arange(len(source_points)).astype(int)
+    # target_us = x_coords of all pixels. There are 480x640 == 307200 pixels
+    # therefore the shape of target_us = (307200,1)
+    # target_vs = y_coords of all pixels
     target_us, target_vs, target_ds = transforms.project(
         T_source_points, intrinsic)
-    target_us = np.round(target_us).astype(int)
-    target_vs = np.round(target_vs).astype(int)
+    # us and vs (basically just u,v) is just the pixel position in image (called target space)
+    target_us = np.round(target_us).astype(int) # should be within target width
+    target_vs = np.round(target_vs).astype(int) # should be within target height
 
-    # TODO: first filter: valid projection
+    # TODO: first filter: valid projection (valid if the u,v = x,y = width,height is in the space)
     mask = np.zeros_like(target_us).astype(bool)
+
+    # 1st check  np.where(target_us < 200)[0].shape => gives no. of valid correspondences
+    # similarly, we do a series of checks
+    # NOTE. Method 1 of masking
+    mask1 = np.where(target_us < w, True, False)
+    mask2 = np.where(target_vs < h, True, False)
+
+    # NOTE. Method 2 of masking
+    mask3 = np.zeros_like(target_us).astype(bool)
+    mask3 = (target_us > 0) & (target_vs > 0) & (target_ds > 0)
+    mask = np.logical_and(np.logical_and(mask1, mask2), mask3)
+
+    # just to verify we didn't mess up the shapes
+    assert mask.shape == target_us.shape
     # End of TODO
 
+    # Use the above mask to get new source points
     source_indices = source_indices[mask]
     target_us = target_us[mask]
     target_vs = target_vs[mask]
     T_source_points = T_source_points[mask]
 
     # TODO: second filter: apply distance threshold
+    # To apply distance threshold, we'll need to project target_2D_pts onto 3D space
+    # we'll make use of the vertex map to do this
     mask = np.zeros_like(target_us).astype(bool)
+
+    # from code args above, target vertex takes h, w, 3
+    # remember u,v = x,y = width,height
+    target_pts = target_vertex_map[target_vs, target_us] # of shape (307200,3)
+    euclidean_dists = np.linalg.norm(target_pts - T_source_points, axis=1)
+    mask = np.where(euclidean_dists < dist_diff, True, False)
     # End of TODO
 
+    # Use the second mask again to further refine source points and get only
+    # those necessary target points
     source_indices = source_indices[mask]
     target_us = target_us[mask]
     target_vs = target_vs[mask]
@@ -82,10 +116,37 @@ def build_linear_system(source_points, target_points, target_normals, T):
     b = np.zeros((M, ))
 
     # TODO: build the linear system
+    """
+    Our linear system is basically Ax - b = 0
+
+    - See theory for definition of A
+    - x = [alpha, beta, gamma, delta_t1, delta_t2, delta_t3].T
+    - b = scalar (1,1) (see theory)
+
+    Now, A is a (M x 6) matrix if we're defining it using QR. M = number of corresp. points.
+    The first three columns of A is easily defined in terms of a cross product (see notes):
+
+    A[0:3] = - np.cross(p_prime_skew, n_q) = -p_prime_skew @ n_q
+    A[3:6] = n_q
+    """
+    for i in range(M):
+        p_prime_skew = get_skew_symm_matrix(p_prime[i,:])
+        A[i,0:3] = -(p_prime_skew @ n_q[i,:])
+        A[i,3:6] = -n_q[i,:]
+
+        b[i] =  np.expand_dims(n_q[i,:],axis=0) @ np.expand_dims((p_prime[i,:] - q[i,:]), axis=1)
     # End of TODO
 
     return A, b
 
+
+def get_skew_symm_matrix(input_matrix):
+    assert input_matrix.shape == (3,)
+    skew_symm_mat = np.array([[0, -input_matrix[2], input_matrix[1]],
+                              [input_matrix[2], 0, -input_matrix[0]],
+                              [-input_matrix[1], input_matrix[0], 0]])
+
+    return skew_symm_mat
 
 def pose2transformation(delta):
     '''
@@ -128,8 +189,19 @@ def solve(A, b):
     \param b (6, 1) vector in the LU formulation, or (N, 1) in the QR formulation
     \return delta (6, ) vector by solving the linear system. You may directly use dense solvers from numpy.
     '''
-    # TODO: write your relevant solver
-    return np.zeros((6, ))
+    # TODO: write your relavant solver
+    # Using the QR solver from the previous assignment
+    N = A.shape[1]
+    x = np.zeros((N, ))
+    R = np.eye(N)
+
+    # convert A to a sparse matrix in COO format
+    A_coo = scipy.sparse.coo_matrix(A)
+
+    # rz gives the upper triangular part
+    Z, R ,_ ,_ = rz(A_coo, b, permc_spec='NATURAL')
+    x = spsolve_triangular(R,Z,lower=False)
+    return x
 
 
 def icp(source_points,
@@ -173,6 +245,9 @@ def icp(source_points,
                                    corres_target_normals, T)
         delta = solve(A, b)
 
+        if delta.shape == (6,1):
+            delta = np.squeeze(delta, axis=1)
+
         # Update and output
         T = pose2transformation(delta) @ T
         loss = np.mean(b**2)
@@ -186,7 +261,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        'path', help='path to the dataset folder containing rgb/ and depth/')
+        '--path', help='path to the dataset folder containing rgb/ and depth/', nargs='?',
+        default="/home/sush/CMU/SLAM-and-Robot-Autonomy/SLAM/ICP_fusion/living_room_traj2_frei_png")
     parser.add_argument('--source_idx',
                         type=int,
                         help='index to the source depth/normal maps',
