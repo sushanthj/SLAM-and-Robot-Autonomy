@@ -20,6 +20,7 @@ seed(10)
 
 # Open the simulator model from the MJCF file
 # xml_filepath = "../franka_emika_panda/panda_with_hand_torque.xml"
+# xml_filepath = "../franka_emika_panda/panda_nohand_torque_fixed_board_2.xml"
 xml_filepath = "../franka_emika_panda/panda_with_hand_torque_2.xml"
 
 np.random.seed(0)
@@ -44,17 +45,17 @@ axesObs=[]
 
 # # NOTE: We hard code the obstacle pose and dimentions
 # # envpts, envaxes  = rt.BlockDesc2Points(pose, dimension) # object 1
-# envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.1,0,1.0]),[1.3,1.4,0.1])
-# pointsObs.append(envpoints), axesObs.append(envaxes)
+envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.1,0,1.0]),[1.3,1.4,0.1])
+pointsObs.append(envpoints), axesObs.append(envaxes)
 
-# envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.1,-0.65,0.475]),[1.3,0.1,0.95])
-# pointsObs.append(envpoints), axesObs.append(envaxes)
+envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.1,-0.65,0.475]),[1.3,0.1,0.95])
+pointsObs.append(envpoints), axesObs.append(envaxes)
 
-# envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.1, 0.65,0.475]),[1.3,0.1,0.95])
-# pointsObs.append(envpoints), axesObs.append(envaxes)
+envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.1, 0.65,0.475]),[1.3,0.1,0.95])
+pointsObs.append(envpoints), axesObs.append(envaxes)
 
-# envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[-0.5, 0, 0.475]),[0.1,1.2,0.95])
-# pointsObs.append(envpoints), axesObs.append(envaxes)
+envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[-0.5, 0, 0.475]),[0.1,1.2,0.95])
+pointsObs.append(envpoints), axesObs.append(envaxes)
 
 # envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.45, 0, 0.25]),[0.5,0.4,0.5])
 # pointsObs.append(envpoints), axesObs.append(envaxes)
@@ -65,9 +66,10 @@ deg_to_rad = np.pi/180.
 # set the initial and goal joint configurations
 # NOTE: In the lab, this can be found by manually placing the robot end effector
 # to the desired position and then record the joint angles
-qInit = [-np.pi/2, -np.pi/2, np.pi/2, -np.pi/2, 0, np.pi - np.pi/6, 0]
-qGoal = [np.pi/2, -np.pi/2, -np.pi/2, -np.pi/2, 0, np.pi - np.pi/6, 0]
-# qGoal = [-np.pi/2+0.1, -np.pi/2+0.1, np.pi/2, -np.pi/2, 0, np.pi - np.pi/6, 0]
+# qInit = [-np.pi/2, -np.pi/2, np.pi/2, -np.pi/2, 0, np.pi - np.pi/6, 0]
+# qGoal = [np.pi/2, -np.pi/2, -np.pi/2, -np.pi/2, 0, np.pi - np.pi/6, 0]
+qInit = [-1.53, -1.49, 1.51, -1.53, 1.48, 1.65, 0]
+qGoal = [1.56, -1.56, -1.64, -1.56, -1.59, 1.59, -2.01]
 
 # Initialize some data containers for the RRT planner
 rrtVertices=[]
@@ -76,7 +78,19 @@ rrtEdges=[]
 rrtVertices.append(qInit)
 rrtEdges.append(0)
 
+### GLOBAL TUNING VARIABLES ############################################
+# threshold which determines how close we are to goal
 thresh=0.1
+cost_thresh = 0.05
+starting_roll = 3.129 #1.57
+# starting_yaw = -0.14 #1.407
+starting_pitch = -0.14
+angle_resolution = 10
+joint_to_constrain = 7
+learning_rate = 0.2
+path_shortening = True
+#########################################################################
+
 FoundSolution=False
 SolutionInterpolated = False
 
@@ -87,8 +101,6 @@ def FindNearest(prevPoints,newPoint):
 
 # Utility function for smooth linear interpolation of RRT plan, used by the controller
 def naive_interpolation(plan):
-
-	angle_resolution = 0.01
 
 	global interpolated_plan
 	global SolutionInterpolated
@@ -118,40 +130,43 @@ def project_to_constrain(qRand):
 	NOTE: (3.14 - roll) since we have init roll of 3.14
 	"""
 
-	cost_thresh = 0.05
-	starting_roll = 1.57
-
 	# do forward kinematics and get the roll, pitch at qRand
-	roll, pitch, J = get_roll_pitch_of_rand_pt(qRand)
-	print(f"init roll={roll} and pitch={pitch}")
+	roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qRand)
+	print(f"init roll={roll} and pitch={pitch} and yaw={yaw}")
+
+	if (abs(starting_roll-abs(roll))) > 1 or (abs(starting_pitch - abs(pitch)) > 1):
+		return qRand, True
+
 	count = 0
 
-	while(((starting_roll-np.abs(roll))**2 + pitch**2 > cost_thresh) and count < 1000):
+	# while(((starting_roll-abs(roll))**2 + pitch**2 + (starting_yaw - abs(yaw)) > cost_thresh) and count < 1000):
+	while(((starting_roll-abs(roll))**2 + (starting_pitch-abs(pitch))**2 > cost_thresh)
+       		and count < 1000):
 		grad_cost_wrt_xyzrpy = np.expand_dims(np.array([0,0,0, 2*roll, 2*pitch, 0]), axis=1)
 		gradient = J.T @ grad_cost_wrt_xyzrpy
 
 		# print("qrand before", qRand)
-		qRand = np.expand_dims(np.array(qRand), axis=1) - gradient
+		qRand = np.expand_dims(np.array(qRand), axis=1) - learning_rate * gradient
 		qRand = np.squeeze(qRand).tolist()
 		# print("qrand after", qRand)
-		roll, pitch, J = get_roll_pitch_of_rand_pt(qRand)
+		roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qRand)
 		# print(f"new roll={roll} and pitch={pitch}")
 		# print((3.14-np.abs(roll))**2 + pitch**2)
 		count += 1
 
-	print(f"final roll={roll} and pitch={pitch}")
+	print(f"final roll={roll} and pitch={pitch} and yaw={yaw}")
 
-	return qRand
+	return qRand, False
 
 
 def get_roll_pitch_of_rand_pt(qRand):
 	# do forward kinematics and get the Tcurr, J at qRand
 	Tcurr, J = mybot.ForwardKin_for_check(qRand)
-	last_link_rotation = np.asarray(Tcurr[7])[0:3,0:3]
+	last_link_rotation = np.asarray(Tcurr[joint_to_constrain])[0:3,0:3]
 	r = Rotation.from_matrix(last_link_rotation)
-	roll, pitch, _ = r.as_euler('xyz')
+	roll, pitch, yaw = r.as_euler('xyz')
 
-	return roll, pitch, J
+	return roll, pitch, yaw, J
 
 #TODO: - Create RRT to find path to a goal configuration by completing the function
 # below. Use the global rrtVertices, rrtEdges, plan and FoundSolution variables in
@@ -164,8 +179,8 @@ def RRTQuery():
 	global rrtVertices
 	global rrtEdges
 
-	roll, pitch, J = get_roll_pitch_of_rand_pt(qInit)
-	print("starting roll and pitch", roll, pitch)
+	roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qInit)
+	print("starting roll, pitch, and yaw", roll, pitch, yaw)
 
 	# making the assumption that we should find solution within 3000 iterations
 	while len(rrtVertices)<10000 and not FoundSolution:
@@ -180,8 +195,7 @@ def RRTQuery():
 
 		# NOTE: now that we have a qRand, if we want this qRand to be such that the
 		# end effector has roll and pitch as zero
-		qRand = project_to_constrain(qRand)
-		flag = False
+		qRand, flag = project_to_constrain(qRand)
 		for i in range(len(qRand)):
 			if (qRand[i] > mybot.qmax[i] or qRand[i] < mybot.qmin[i]):
 				flag = True
@@ -244,26 +258,27 @@ def RRTQuery():
 			if c==0:
 				break
 
-		for i in range(150):
-			anchorA = np.random.randint(0, len(plan) - 2)
-			anchorB = np.random.randint(anchorA + 1, len(plan) - 1)
+		if path_shortening:
+			for i in range(150):
+				anchorA = np.random.randint(0, len(plan) - 2)
+				anchorB = np.random.randint(anchorA + 1, len(plan) - 1)
 
-			shiftA = np.random.uniform(0, 1)
-			shiftB = np.random.uniform(0, 1)
+				shiftA = np.random.uniform(0, 1)
+				shiftB = np.random.uniform(0, 1)
 
-			candidateA = (1 - shiftA) * np.array(plan[anchorA]) + shiftA * np.array(plan[anchorA + 1])
-			try:
-				candidateB = (1 - shiftB) * np.array(plan[anchorB]) + shiftB * np.array(plan[anchorB + 1])
-			except:
-				ipdb.set_trace()
+				candidateA = (1 - shiftA) * np.array(plan[anchorA]) + shiftA * np.array(plan[anchorA + 1])
+				try:
+					candidateB = (1 - shiftB) * np.array(plan[anchorB]) + shiftB * np.array(plan[anchorB + 1])
+				except:
+					ipdb.set_trace()
 
-			if not mybot.DetectCollisionEdge(candidateA, candidateB, pointsObs, axesObs):
-				while anchorB > anchorA:
-					plan.pop(anchorB)
-					anchorB = anchorB - 1
+				if not mybot.DetectCollisionEdge(candidateA, candidateB, pointsObs, axesObs):
+					while anchorB > anchorA:
+						plan.pop(anchorB)
+						anchorB = anchorB - 1
 
-				plan.insert(anchorA + 1, candidateB)
-				plan.insert(anchorA + 1, candidateA)
+					plan.insert(anchorA + 1, candidateB)
+					plan.insert(anchorA + 1, candidateA)
 
 		for (i, q) in enumerate(plan):
 			print("Plan step: ", i, "and joint: ", q)
