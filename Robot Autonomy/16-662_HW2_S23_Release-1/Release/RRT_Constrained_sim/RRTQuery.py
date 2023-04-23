@@ -19,9 +19,9 @@ from scipy.spatial.transform import Rotation
 seed(10)
 
 # Open the simulator model from the MJCF file
-# xml_filepath = "../franka_emika_panda/panda_with_hand_torque.xml"
+xml_filepath = "../franka_emika_panda/panda_with_hand_torque.xml"
 # xml_filepath = "../franka_emika_panda/panda_nohand_torque_fixed_board_2.xml"
-xml_filepath = "../franka_emika_panda/panda_with_hand_torque_2.xml"
+# xml_filepath = "../franka_emika_panda/panda_with_hand_torque_2.xml"
 
 np.random.seed(0)
 deg_to_rad = np.pi/180.
@@ -57,8 +57,8 @@ pointsObs.append(envpoints), axesObs.append(envaxes)
 envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[-0.5, 0, 0.475]),[0.1,1.2,0.95])
 pointsObs.append(envpoints), axesObs.append(envaxes)
 
-# envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.45, 0, 0.25]),[0.5,0.4,0.5])
-# pointsObs.append(envpoints), axesObs.append(envaxes)
+envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.45, 0, 0.25]),[0.5,0.4,0.5])
+pointsObs.append(envpoints), axesObs.append(envaxes)
 
 # define start and goal
 deg_to_rad = np.pi/180.
@@ -81,11 +81,11 @@ rrtEdges.append(0)
 ### GLOBAL TUNING VARIABLES ############################################
 # threshold which determines how close we are to goal
 thresh=0.1
-cost_thresh = 0.05
+cost_thresh = 0.2
 starting_roll = 3.129 #1.57
 # starting_yaw = -0.14 #1.407
 starting_pitch = -0.14
-angle_resolution = 10
+angle_resolution = 0.2
 joint_to_constrain = 7
 learning_rate = 0.2
 path_shortening = True
@@ -132,7 +132,7 @@ def project_to_constrain(qRand):
 
 	# do forward kinematics and get the roll, pitch at qRand
 	roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qRand)
-	print(f"init roll={roll} and pitch={pitch} and yaw={yaw}")
+	# print(f"init roll={roll} and pitch={pitch} and yaw={yaw}")
 
 	if (abs(starting_roll-abs(roll))) > 1 or (abs(starting_pitch - abs(pitch)) > 1):
 		return qRand, True
@@ -145,16 +145,12 @@ def project_to_constrain(qRand):
 		grad_cost_wrt_xyzrpy = np.expand_dims(np.array([0,0,0, 2*roll, 2*pitch, 0]), axis=1)
 		gradient = J.T @ grad_cost_wrt_xyzrpy
 
-		# print("qrand before", qRand)
 		qRand = np.expand_dims(np.array(qRand), axis=1) - learning_rate * gradient
 		qRand = np.squeeze(qRand).tolist()
-		# print("qrand after", qRand)
 		roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qRand)
-		# print(f"new roll={roll} and pitch={pitch}")
-		# print((3.14-np.abs(roll))**2 + pitch**2)
 		count += 1
 
-	print(f"final roll={roll} and pitch={pitch} and yaw={yaw}")
+	# print(f"final roll={roll} and pitch={pitch} and yaw={yaw}")
 
 	return qRand, False
 
@@ -193,6 +189,7 @@ def RRTQuery():
 		if np.random.uniform(0,1) < thresh:
 			qRand = qGoal
 
+		"""Constrained RRT step"""
 		# NOTE: now that we have a qRand, if we want this qRand to be such that the
 		# end effector has roll and pitch as zero
 		qRand, flag = project_to_constrain(qRand)
