@@ -83,13 +83,14 @@ rrtEdges.append(0)
 thresh=0.1
 cost_thresh = 0.2
 starting_roll = 3.129 #1.57
-# starting_yaw = -0.14 #1.407
 starting_pitch = -0.14
+rejection_threshold = 1
 angle_resolution = 0.2
 joint_to_constrain = 7
 learning_rate = 0.2
 path_shortening = True
 #########################################################################
+# NOTE: for tight perf. reqs. use cost_thres = 0.1, rejection_thres = 0.3
 
 FoundSolution=False
 SolutionInterpolated = False
@@ -134,7 +135,8 @@ def project_to_constrain(qRand):
 	roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qRand)
 	# print(f"init roll={roll} and pitch={pitch} and yaw={yaw}")
 
-	if (abs(starting_roll-abs(roll))) > 1 or (abs(starting_pitch - abs(pitch)) > 1):
+	if (abs(starting_roll-abs(roll))) > rejection_threshold or \
+		(abs(starting_pitch - abs(pitch)) > rejection_threshold):
 		return qRand, True
 
 	count = 0
