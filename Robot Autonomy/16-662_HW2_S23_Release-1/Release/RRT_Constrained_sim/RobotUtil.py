@@ -156,3 +156,25 @@ def CheckBoxBoxCollision(pointsA,axesA,pointsB,axesB):
 
 
 	return True
+
+def so3(axis):
+
+	so3_axis = np.asarray([
+		[0,-axis[2], axis[1]],
+		[axis[2], 0, -axis[0]],
+		[-axis[1], axis[0], 0]
+		])
+	return so3_axis
+
+def MatrixExp(axis,theta):
+
+	so3_axis = so3(axis)
+
+	R = np.eye(3) + np.sin(theta)*so3_axis + (1 - np.cos(theta))*np.matmul(so3_axis, so3_axis)
+
+	last = np.zeros((1,4))
+	last[0,3] = 1
+
+	H_r = np.vstack((np.hstack((R,np.zeros((3,1)))),last))
+
+	return H_r

@@ -6,6 +6,8 @@ import random
 import RobotUtil as rt
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import ipdb
+from copy import deepcopy
 
 
 class FrankArm:
@@ -61,6 +63,17 @@ class FrankArm:
 
 		self.q=[0.,0.,0.,0.,0.,0.,0.]
 		self.ForwardKin([0.,0.,0.,0.,0.,0.,0.])
+		"""
+		In the home position after doing forward kinematics as shown above, we get
+		the following Transformation matrix for the end effector by doing:
+
+		from scipy.spatial.transform import Rotation
+		last_link = np.asarray(self.Tcurr[7])[0:3, 0:3] # the indexing gives us the rotation component
+		r = Rotation.from_matrix(last_link)
+		roll, pitch, yaw = r.as_euler('xyz')
+
+		Then the output would be array([3.14159265, 0., 0.])
+		"""
 
 		# NEW #############################
 		# joint limits
@@ -125,6 +138,10 @@ class FrankArm:
 		self.Tcoll=[]  # Coordinate frame of current collision block
 
 		#! Where are these used?
+		"""
+		I think Cdesc is the pose of the robot's joints's bounding boxes
+		Cdim = dimensions of robot'a arm's cuboids
+		"""
 		self.Cpoints=[]
 		self.Caxes=[]
 
@@ -144,7 +161,6 @@ class FrankArm:
 		# print("Len of q: ",len(self.q))
 		# print("len of q slice: ", len(self.q[0:-1]))
 		# print("len of ang: ", len(ang))
-
 
 		self.q[0:-1]=ang
 
@@ -175,6 +191,45 @@ class FrankArm:
 		return self.Tcurr, self.J
 
 
+	def ForwardKin_for_check(self,ang):
+		'''
+		inputs: joint angles
+		outputs: joint transforms for each joint, Jacobian matrix
+		'''
+
+		q = deepcopy(self.q)
+		Rdesc = deepcopy(self.Rdesc)
+		Tjoint = deepcopy(self.Tjoint)
+		Tlink = deepcopy(self.Tlink)
+		Tcurr = deepcopy(self.Tcurr)
+		J = deepcopy(self.J)
+		axis = deepcopy(self.axis)
+
+		q[0:-1] = ang
+
+		for i in range(len(Rdesc)):
+
+			try:
+				Tjoint[i] = [[math.cos(q[i]),-math.sin(q[i]),0,0],[math.sin(q[i]),math.cos(q[i]),0,0],[0,0,1,0],[0,0,0,1]]
+			except:
+				ipdb.set_trace()
+
+			#! I sort of understand this, but still little cryptic
+			if i == 0:
+				Tcurr[i]=np.matmul(Tlink[i],Tjoint[i])
+			else:
+				Tcurr[i]=np.matmul(np.matmul(Tcurr[i-1],Tlink[i]),Tjoint[i])
+
+		# Compute Jacobian matrix
+		for i in range(len(Tcurr)-1):
+			p=Tcurr[-1][0:3,3]-Tcurr[i][0:3,3]
+			# tells which axis the joint is rotating about
+			ax_of_rotation = np.nonzero(axis[i])[0][0]
+			a=Tcurr[i][0:3,ax_of_rotation]*np.sign(axis[i][ax_of_rotation])
+			J[0:3,i]=np.cross(a,p)
+			J[3:7,i]=a
+
+		return Tcurr, J
 
 	def IterInvKin(self,ang,TGoal,x_eps=1e-3, r_eps=1e-3):
 		'''
@@ -297,16 +352,26 @@ class FrankArm:
 			# print(self.Tcoll[i])
 
 	def DetectCollision(self, ang, pointsObs, axesObs):
+		# given some new joint angles, we first do forward kinematics and then check
+		# every joint and it's bounding box whether it's colliding with obstacles
+
+		# do forward kinematics and update bounding box poses for robot joints
 		self.CompCollisionBlockPoints(ang)
 
 		for i in range(len(self.Cpoints)):
 			for j in range(len(pointsObs)):
+				# rt is the utils file, here we do the separating axes theorem checks
+				# on all robot joint bboxes and obstacle bboxes
 				if rt.CheckBoxBoxCollision(self.Cpoints[i],self.Caxes[i],pointsObs[j], axesObs[j]):
 					return True
 		return False
 
 
 	def DetectCollisionEdge(self, ang1, ang2, pointsObs, axesObs):
+		# Here we discretize our new found joint angles to 5 steps
+		# and we check for collisions at each of these 5 steps
+		# In RRT sense, we extend the edge, discretize this extension into 5 steps and check
+		# for collisions in each of these steps
 		for s in np.linspace(0,1,5): #The number of steps along the edge may need to be adapted
 			ang= [ang1[k]+s*(ang2[k]-ang1[k]) for k in range(len(ang1))]
 
