@@ -238,7 +238,7 @@ def RRTQuery():
 			"""Constrained RRT step"""
 			# NOTE: now that we have a qRand, if we want this qRand to be such that the
 			# end effector has roll and pitch as zero
-			qConnect, flag_1 = project_to_constrain(np.ndarray.tolist(qRand))
+			qConnect, flag_1 = project_to_constrain(np.ndarray.tolist(qConnect))
 			flag_2 = False
 			for i in range(len(qRand)):
 				if (qConnect[i] > mybot.qmax[i] or qRand[i] < mybot.qmin[i]):
