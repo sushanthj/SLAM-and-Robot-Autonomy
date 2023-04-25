@@ -19,9 +19,9 @@ from scipy.spatial.transform import Rotation
 seed(10)
 
 # Open the simulator model from the MJCF file
-xml_filepath = "../franka_emika_panda/panda_with_hand_torque.xml"
+# xml_filepath = "../franka_emika_panda/panda_with_hand_torque.xml"
 # xml_filepath = "../franka_emika_panda/panda_nohand_torque_fixed_board_2.xml"
-# xml_filepath = "../franka_emika_panda/panda_with_hand_torque_2.xml"
+xml_filepath = "../franka_emika_panda/panda_with_hand_torque_2.xml"
 
 np.random.seed(0)
 deg_to_rad = np.pi/180.
@@ -57,8 +57,8 @@ pointsObs.append(envpoints), axesObs.append(envaxes)
 envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[-0.5, 0, 0.475]),[0.1,1.2,0.95])
 pointsObs.append(envpoints), axesObs.append(envaxes)
 
-envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.45, 0, 0.25]),[0.5,0.4,0.5])
-pointsObs.append(envpoints), axesObs.append(envaxes)
+# envpoints, envaxes = rt.BlockDesc2Points(rt.rpyxyz2H([0,0.,0.],[0.45, 0, 0.25]),[0.5,0.4,0.5])
+# pointsObs.append(envpoints), axesObs.append(envaxes)
 
 # define start and goal
 deg_to_rad = np.pi/180.
@@ -70,6 +70,24 @@ deg_to_rad = np.pi/180.
 # qGoal = [np.pi/2, -np.pi/2, -np.pi/2, -np.pi/2, 0, np.pi - np.pi/6, 0]
 qInit = [-1.53, -1.49, 1.51, -1.53, 1.48, 1.65, 0]
 qGoal = [1.56, -1.56, -1.64, -1.56, -1.59, 1.59, -2.01]
+qinit = [
+        -0.43624853,
+        0.48709308,
+        -0.12531946,
+        -2.29045203,
+        0.00457875,
+        2.7702772,
+        1.74293209,
+    ]
+q_trial_2 = [
+        -0.33487532,
+        0.13608687,
+        0.98505709,
+        -2.22657376,
+        0.15594624,
+        2.486263,
+        2.87879611,
+    ]
 
 # Initialize some data containers for the RRT planner
 rrtVertices=[]
@@ -79,9 +97,8 @@ rrtVertices.append(qInit)
 rrtEdges.append(0)
 
 ### GLOBAL TUNING VARIABLES ############################################
-# threshold which determines how close we are to goal
-thresh=0.1
-cost_thresh = 0.2
+thresh=0.1 # threshold to which we can extend graph in one step
+cost_thresh = 0.1
 starting_roll = 3.129 #1.57
 starting_pitch = -0.14
 rejection_threshold = 1
@@ -194,13 +211,18 @@ def RRTQuery():
 		"""Constrained RRT step"""
 		# NOTE: now that we have a qRand, if we want this qRand to be such that the
 		# end effector has roll and pitch as zero
-		qRand, flag = project_to_constrain(qRand)
+		qRand, flag_1 = project_to_constrain(qRand)
+		flag_2 = False
 		for i in range(len(qRand)):
 			if (qRand[i] > mybot.qmax[i] or qRand[i] < mybot.qmin[i]):
-				flag = True
+				flag_2 = True
 
-		if flag:
+		# flag_1 -> being true denotes that we couldn't project
+		# flag_2 -> being true denotes that we got infeasible joint angles
+		# print(flag_1, flag_2)
+		if flag_1 or flag_2:
 			continue
+		"""End of Constrained RRT"""
 
 		idNear = FindNearest(rrtVertices, qRand)
 		qNear = rrtVertices[idNear]
@@ -213,6 +235,24 @@ def RRTQuery():
 			# qConnect = qNear + thres * unit_vector_pointing_towards_qRand
 			qConnect = qNear + thresh * ((qRand-qNear) / np.linalg.norm(qRand-qNear))
 
+			"""Constrained RRT step"""
+			# NOTE: now that we have a qRand, if we want this qRand to be such that the
+			# end effector has roll and pitch as zero
+			qConnect, flag_1 = project_to_constrain(np.ndarray.tolist(qRand))
+			flag_2 = False
+			for i in range(len(qRand)):
+				if (qConnect[i] > mybot.qmax[i] or qRand[i] < mybot.qmin[i]):
+					flag_2 = True
+
+			# flag_1 -> being true denotes that we couldn't project
+			# flag_2 -> being true denotes that we got infeasible joint angles
+			# print(flag_1, flag_2)
+			if flag_1 or flag_2:
+				break
+			else:
+				qConnect = np.asarray(qConnect)
+			"""End of Constrained RRT"""
+
 			if not mybot.DetectCollisionEdge(qConnect, qNear, pointsObs, axesObs):
 				rrtVertices.append(qConnect)
 				rrtEdges.append(idNear)
@@ -220,6 +260,22 @@ def RRTQuery():
 
 			else:
 				break
+
+		"""Constrained RRT step"""
+		# # NOTE: now that we have a qRand, if we want this qRand to be such that the
+		# # end effector has roll and pitch as zero
+		# qRand, flag_1 = project_to_constrain(np.ndarray.tolist(qRand))
+		# flag_2 = False
+		# for i in range(len(qRand)):
+		# 	if (qRand[i] > mybot.qmax[i] or qRand[i] < mybot.qmin[i]):
+		# 		flag_2 = True
+
+		# # flag_1 -> being true denotes that we couldn't project
+		# # flag_2 -> being true denotes that we got infeasible joint angles
+		# # print(flag_1, flag_2)
+		# if flag_1 or flag_2:
+		# 	continue
+		"""End of Constrained RRT"""
 
 		# check for collisions
 		qConnect = qRand

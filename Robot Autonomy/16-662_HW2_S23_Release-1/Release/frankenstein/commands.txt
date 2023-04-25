@@ -1,0 +1,8 @@
+cd ~/Prog/frankapy && bash bash_scripts/start_control_pc.sh -u student -i iam-happy
+
+cd ~/Prog/frankapy && python scripts/reset_arm.py
+
+For camera calibration:
+$ roslaunch azure_kinect_ros_driver driver.launch
+$ roslaunch aruco.launch
+$ rosrun rqt_image_view rqt_image_view
