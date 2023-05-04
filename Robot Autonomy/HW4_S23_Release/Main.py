@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
 ############################## MODIFY THE CALLS BELOW ###########################
     # TODO: Uncomment the correct method call below
-    sim.CEM()
-    # sim.REPS()
+    # sim.CEM()
+    sim.REPS()
 ############################## MODIFY THE CALLS ABOVE ###########################
 

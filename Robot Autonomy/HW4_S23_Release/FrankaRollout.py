@@ -283,7 +283,7 @@ class FrankaSim():
     ########################################################################
 
     def CEM(self):
-        """This method implements the CEM algorithm and plots the average reward 
+        """This method implements the CEM algorithm and plots the average reward
         after all iterations."""
 
         #initialize policy
@@ -336,7 +336,7 @@ class FrankaSim():
         #Define dual function to be optimized
         def dual_function(eta):
             #TODO:
-            df = 0 # Correct this line
+            df = (eta * epsilon) + np.log(np.mean(np.exp(R/eta))) * eta + np.max(returns)
             return df
 
         #Perform optimization of dual function
@@ -352,3 +352,44 @@ class FrankaSim():
         self.policyCov = np.diag([1 for i in range((4*self.no_of_active_joints)+2)])
 
         # TODO:
+        nrIterations = 5
+        nrSamp = 15
+        Rewards = []
+        Plot_Rewards = []
+        eta = 1.7
+
+        for i in range(nrIterations):
+            Sample_Params = []
+            Rewards = []
+            for j in range(nrSamp):
+
+                sample_params = self.sample_policy()
+                reward = self.policy_rollout()
+                Sample_Params.append(sample_params)
+                Rewards.append(reward)
+                Plot_Rewards.append(reward)
+                print(j)
+
+            Rewards = np.array(Rewards)
+            Sample_Params = np.array(Sample_Params)
+
+            eta = self.computeEta(Rewards, eta)
+            weights = np.exp((Rewards - np.max(Rewards))/eta)
+            weights = weights / np.sum(weights)
+            print(np.sum(weights))
+
+            # Compute mean of samples weighted by their corresponding weights
+            # self.policyMu = np.sum(weights * theta, axis=0) / np.sum(weights)
+            self.policyMu = np.sum(weights[:,None] * Sample_Params, axis=0) / np.sum(weights)
+
+            # Compute covariance matrix of samples weighted by their corresponding weights
+            # self.std = np.sum(weights * (theta - self.policyMu) * (theta - self.policyMu), axis=0) / np.sum(weights) + 0.1
+            self.policyCov = np.cov(Sample_Params.T, aweights=weights)
+
+        plot_rewards(Plot_Rewards)
+        input("enter to check")
+        for i in range(5):
+            self.policyCov = np.zeros((10,10))
+            sample_params = self.sample_policy()
+            reward = self.policy_rollout()
+            print(reward)
