@@ -101,7 +101,7 @@ thresh=0.1 # threshold to which we can extend graph in one step
 cost_thresh = 0.1
 starting_roll = 3.129 #1.57
 starting_pitch = -0.14
-rejection_threshold = 1
+rejection_threshold = 0.5
 angle_resolution = 0.2
 joint_to_constrain = 7
 learning_rate = 0.2
@@ -196,6 +196,8 @@ def RRTQuery():
 
 	roll, pitch, yaw, J = get_roll_pitch_of_rand_pt(qInit)
 	print("starting roll, pitch, and yaw", roll, pitch, yaw)
+
+	start_time = time.time()
 
 	# making the assumption that we should find solution within 3000 iterations
 	while len(rrtVertices)<10000 and not FoundSolution:
@@ -292,6 +294,8 @@ def RRTQuery():
 			rrtVertices.append(qGoal)
 			rrtEdges.append(idNear)
 			print("SOLUTION FOUND")
+			end_time = time.time()
+			print("Overall Time for Planning was", end_time-start_time)
 			FoundSolution = True
 
 		print(len(rrtVertices))
